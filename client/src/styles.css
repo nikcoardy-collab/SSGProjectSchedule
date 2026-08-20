@@ -264,15 +264,28 @@ tr.phase-row td.gday.rollup > i { background: rgba(255, 255, 255, 0.55); }
 tr.task-row td { background: var(--card); }
 tr.task-row:hover td.sticky-col { background: #f7f7f4; }
 tr.task-row.sel td.sticky-col { background: var(--ink-100); }
-.task-cell { display: flex; align-items: center; gap: 6px; padding: 0 8px 0 16px; height: 100%; }
+.task-cell { display: flex; align-items: center; gap: 6px; padding: 0 8px 0 16px; height: 100%; position: relative; }
 .task-name {
   flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   text-align: left; border: none; background: none; padding: 0; color: inherit; font-size: 12.5px;
 }
 .task-name.readonly { cursor: default; }
 .task-name:not(.readonly):hover { text-decoration: underline; text-decoration-color: var(--line); }
-.task-cell .row-tools { display: none; gap: 2px; }
-tr.task-row:hover .row-tools { display: flex; }
+/* Floating mini-toolbar: overlays the row on hover instead of pushing the
+   name aside, so nothing resizes or shifts. */
+.task-cell .row-tools {
+  display: flex; gap: 2px;
+  position: absolute; right: 3px; top: 50%; transform: translateY(-50%);
+  padding: 2px 3px; border-radius: 7px;
+  background: var(--card); border: 1px solid var(--line-soft);
+  box-shadow: var(--shadow-sm);
+  opacity: 0; pointer-events: none;
+  transition: opacity 100ms ease;
+}
+tr.task-row:hover .task-cell .row-tools,
+.task-cell .row-tools:focus-within {
+  opacity: 1; pointer-events: auto;
+}
 .icon-btn {
   border: none; background: none; color: var(--muted); width: 22px; height: 22px;
   border-radius: 5px; display: grid; place-items: center; font-size: 13px; line-height: 1;
