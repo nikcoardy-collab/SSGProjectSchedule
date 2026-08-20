@@ -93,28 +93,30 @@ export default function GanttChart({
 
       const next: { key: string; d: string; blocked: boolean }[] = [];
       for (const t of byId.values()) {
-        if (!t.dependsOn || !t.startDate) continue;
-        const pred = byId.get(t.dependsOn);
-        if (!pred?.endDate) continue;
-        const endCell = table.querySelector(
-          `tr[data-task-id="${pred.id}"] td[data-iso="${pred.endDate}"]`
-        );
-        const startCell = table.querySelector(
-          `tr[data-task-id="${t.id}"] td[data-iso="${t.startDate}"]`
-        );
-        if (!endCell || !startCell) continue;
-        const a = endCell.getBoundingClientRect();
-        const b = startCell.getBoundingClientRect();
-        const x1 = a.right - origin.left - 3;
-        const y1 = a.top - origin.top + a.height / 2;
-        const x2 = b.left - origin.left + 1;
-        const y2 = b.top - origin.top + b.height / 2;
-        const bendX = Math.max(x1 + 7, x2 - 7);
-        const d =
-          y1 === y2
-            ? `M ${x1} ${y1} L ${x2} ${y2}`
-            : `M ${x1} ${y1} H ${bendX} V ${y2} H ${x2}`;
-        next.push({ key: `${pred.id}-${t.id}`, d, blocked: t.blocked });
+        if (!t.startDate || t.predecessors.length === 0) continue;
+        for (const link of t.predecessors) {
+          const pred = byId.get(link.id);
+          if (!pred?.endDate) continue;
+          const endCell = table.querySelector(
+            `tr[data-task-id="${pred.id}"] td[data-iso="${pred.endDate}"]`
+          );
+          const startCell = table.querySelector(
+            `tr[data-task-id="${t.id}"] td[data-iso="${t.startDate}"]`
+          );
+          if (!endCell || !startCell) continue;
+          const a = endCell.getBoundingClientRect();
+          const b = startCell.getBoundingClientRect();
+          const x1 = a.right - origin.left - 3;
+          const y1 = a.top - origin.top + a.height / 2;
+          const x2 = b.left - origin.left + 1;
+          const y2 = b.top - origin.top + b.height / 2;
+          const bendX = Math.max(x1 + 7, x2 - 7);
+          const d =
+            y1 === y2
+              ? `M ${x1} ${y1} L ${x2} ${y2}`
+              : `M ${x1} ${y1} H ${bendX} V ${y2} H ${x2}`;
+          next.push({ key: `${pred.id}-${t.id}`, d, blocked: link.status !== 'Complete' });
+        }
       }
       setCanvas({ w: table.offsetWidth, h: table.offsetHeight });
       setLinks(next);
@@ -304,8 +306,10 @@ export default function GanttChart({
                           {task.assigneeName ? (
                             <span style={{ color: 'var(--muted)' }}> · {task.assigneeName}</span>
                           ) : null}
-                          {task.dependsOnName ? (
-                            <span style={{ color: 'var(--muted)' }}> · after {task.dependsOnName}</span>
+                          {task.predecessors.length > 0 ? (
+                            <span style={{ color: 'var(--muted)' }}>
+                              {' '}· after {task.predecessors.map((p) => p.name).join(', ')}
+                            </span>
                           ) : null}
                         </button>
                         {editable && (
@@ -326,7 +330,14 @@ export default function GanttChart({
                       <StatusPill
                         status={task.status}
                         editable={editable}
-                        blockedBy={task.blocked ? task.dependsOnName : null}
+                        blockedBy={
+                          task.blocked
+                            ? task.predecessors
+                                .filter((p) => p.status !== 'Complete')
+                                .map((p) => p.name)
+                                .join(', ')
+                            : null
+                        }
                         onChange={(status: TaskStatus) => onPatchTask(task.id, { status })}
                       />
                     </td>

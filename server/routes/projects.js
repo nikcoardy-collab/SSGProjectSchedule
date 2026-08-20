@@ -19,15 +19,30 @@ async function serialiseProject(p) {
   // One query for every task in the project, then grouped in memory — a query per
   // phase would be six round trips to Supabase instead of two.
   const taskRows = await many(
-    `SELECT t.*, u.name AS assignee_name,
-            dep.name AS depends_on_name, dep.status AS depends_on_status
+    `SELECT t.*, u.name AS assignee_name
      FROM tasks t
      JOIN phases ph ON ph.id = t.phase_id
      LEFT JOIN users u ON u.id = t.assignee_id
-     LEFT JOIN tasks dep ON dep.id = t.depends_on
      WHERE ph.project_id = ? ORDER BY t.position, t.id`,
     [p.id]
   );
+
+  // Every dependency edge in the project, grouped by the dependent task.
+  const depRows = await many(
+    `SELECT d.task_id, pr.id, pr.name, pr.status
+     FROM task_deps d
+     JOIN tasks pr ON pr.id = d.depends_on
+     JOIN tasks t ON t.id = d.task_id
+     JOIN phases ph ON ph.id = t.phase_id
+     WHERE ph.project_id = ? ORDER BY pr.id`,
+    [p.id]
+  );
+  const depsByTask = new Map();
+  for (const d of depRows) {
+    const list = depsByTask.get(d.task_id) ?? [];
+    list.push({ id: d.id, name: d.name, status: d.status });
+    depsByTask.set(d.task_id, list);
+  }
 
   // Per-day comment/file counts drive the little dot markers on the chart.
   const commentCounts = await many(
@@ -66,10 +81,9 @@ async function serialiseProject(p) {
       selectedDates: t.selected_dates ?? [],
       assigneeId: t.assignee_id,
       assigneeName: t.assignee_name,
-      dependsOn: t.depends_on,
-      dependsOnName: t.depends_on_name,
-      // Derived, never stored: blocked while the predecessor is not Complete.
-      blocked: !!(t.depends_on && t.depends_on_status !== 'Complete'),
+      predecessors: depsByTask.get(t.id) ?? [],
+      // Derived, never stored: blocked while any predecessor is not Complete.
+      blocked: (depsByTask.get(t.id) ?? []).some((d) => d.status !== 'Complete'),
       dayMeta: dayMeta.get(t.id) ?? {},
       notes: t.notes,
       position: t.position,

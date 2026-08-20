@@ -1,20 +1,25 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, MAX_FILE_BYTES } from '../lib/api';
+import DependencyPicker from './DependencyPicker';
 import { prepareImageForUpload } from '../lib/images';
 import type { DayDetails, Task, User } from '../lib/types';
 import { dayOfWeek, formatDate } from '../lib/dates';
 import { initials } from './Shell';
 import { statusClass } from './StatusPill';
 
+import type { LinkOption } from './DependencyPicker';
+
 interface Props {
   task: Task;
   iso: string;
   currentUser: User;
-  /** Whether this viewer may remove the day from the schedule. */
+  /** Whether this viewer may edit the item — remove the day, change its link. */
   canEditDays: boolean;
+  /** Other items in the project this one can be linked to come after. */
+  linkOptions: LinkOption[];
   onRemoveDay: () => void;
   onClose: () => void;
-  /** Called after any comment/file change so the chart dots stay fresh. */
+  /** Called after any change so the chart stays fresh. */
   onChanged: () => void;
 }
 
@@ -32,7 +37,7 @@ function formatSize(bytes: number): string {
 const isImage = (mime: string) => /^image\//.test(mime);
 
 export default function DayModal({
-  task, iso, currentUser, canEditDays, onRemoveDay, onClose, onChanged,
+  task, iso, currentUser, canEditDays, linkOptions, onRemoveDay, onClose, onChanged,
 }: Props) {
   const [details, setDetails] = useState<DayDetails | null>(null);
   const [error, setError] = useState('');
@@ -41,6 +46,25 @@ export default function DayModal({
   const [uploading, setUploading] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const isPM = currentUser.role === 'pm';
+  const [dependsOn, setDependsOn] = useState<number[]>(task.predecessors.map((p) => p.id));
+  const [savingLink, setSavingLink] = useState(false);
+  const linkChoices = linkOptions.filter((o) => o.id !== task.id);
+
+  async function changeDependencies(next: number[]) {
+    const previous = dependsOn;
+    setDependsOn(next);
+    setSavingLink(true);
+    setError('');
+    try {
+      await api.updateTask(task.id, { dependsOn: next });
+      onChanged();
+    } catch (err) {
+      setDependsOn(previous); // the server refused (e.g. a circular chain)
+      setError(err instanceof Error ? err.message : 'Could not change the links');
+    } finally {
+      setSavingLink(false);
+    }
+  }
 
   const refresh = useCallback(async () => {
     try {
@@ -120,6 +144,22 @@ export default function DayModal({
 
         <div className="modal-body">
           {error && <div className="alert">{error}</div>}
+
+          {canEditDays && (
+            <div className="field">
+              <label>Comes after</label>
+              <DependencyPicker
+                options={linkChoices}
+                value={dependsOn}
+                disabled={savingLink}
+                onChange={changeDependencies}
+              />
+              <p className="hint">
+                Changes apply immediately. This item shows as Blocked until every
+                linked item is Complete.
+              </p>
+            </div>
+          )}
 
           <div className="field">
             <label>Photos & files</label>

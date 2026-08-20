@@ -148,6 +148,16 @@ const UPGRADES = [
   'CREATE INDEX IF NOT EXISTS idx_day_files ON task_day_files (task_id, day)',
   'ALTER TABLE task_day_comments ENABLE ROW LEVEL SECURITY',
   'ALTER TABLE task_day_files ENABLE ROW LEVEL SECURITY',
+  `CREATE TABLE IF NOT EXISTS task_deps (
+     task_id integer NOT NULL REFERENCES tasks (id) ON DELETE CASCADE,
+     depends_on integer NOT NULL REFERENCES tasks (id) ON DELETE CASCADE,
+     PRIMARY KEY (task_id, depends_on)
+   )`,
+  `INSERT INTO task_deps (task_id, depends_on)
+     SELECT id, depends_on FROM tasks WHERE depends_on IS NOT NULL
+     ON CONFLICT DO NOTHING`,
+  'UPDATE tasks SET depends_on = NULL WHERE depends_on IS NOT NULL',
+  'ALTER TABLE task_deps ENABLE ROW LEVEL SECURITY',
 ];
 
 let upgradesPromise = null;

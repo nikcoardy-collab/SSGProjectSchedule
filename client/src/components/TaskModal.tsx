@@ -3,6 +3,7 @@ import type { Phase, Task, TaskStatus, User } from '../lib/types';
 import { TASK_STATUSES } from '../lib/types';
 import { durationDays, formatDate, rangeBetween } from '../lib/dates';
 import DatePickerPopover from './DatePickerPopover';
+import DependencyPicker from './DependencyPicker';
 import { statusClass } from './StatusPill';
 
 export interface TaskDraft {
@@ -10,7 +11,7 @@ export interface TaskDraft {
   status: TaskStatus;
   selectedDates: string[];
   assigneeId: number | null;
-  dependsOn: number | null;
+  dependsOn: number[];
   notes: string;
 }
 
@@ -35,7 +36,7 @@ function initialDraft(task: Task | null): TaskDraft {
   if (!task) {
     return {
       name: '', status: 'Not Started', selectedDates: [],
-      assigneeId: null, dependsOn: null, notes: '',
+      assigneeId: null, dependsOn: [], notes: '',
     };
   }
   return {
@@ -47,7 +48,7 @@ function initialDraft(task: Task | null): TaskDraft {
         ? rangeBetween(task.startDate, task.endDate)
         : [],
     assigneeId: task.assigneeId,
-    dependsOn: task.dependsOn,
+    dependsOn: task.predecessors.map((p) => p.id),
     notes: task.notes,
   };
 }
@@ -56,10 +57,11 @@ export default function TaskModal({ phase, task, users, linkOptions, onClose, on
   const [draft, setDraft] = useState<TaskDraft>(() => initialDraft(task));
 
   const options = linkOptions.filter((o) => o.id !== task?.id);
-  const chosen = options.find((o) => o.id === draft.dependsOn) ?? null;
-  // While the chosen predecessor is not complete, this item is blocked and
+  const chosen = options.filter((o) => draft.dependsOn.includes(o.id));
+  // While any chosen predecessor is not complete, this item is blocked and
   // cannot be started — mirror the server rule in the status field.
-  const blockedByChoice = !!chosen && chosen.status !== 'Complete';
+  const blockedByChoice = chosen.some((o) => o.status !== 'Complete');
+  const blockingName = chosen.find((o) => o.status !== 'Complete')?.name;
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -129,7 +131,7 @@ export default function TaskModal({ phase, task, users, linkOptions, onClose, on
               </select>
               {blockedByChoice && (
                 <p className="hint">
-                  Shows as Blocked until “{chosen?.name}” is completed.
+                  Shows as Blocked until “{blockingName}” is completed.
                 </p>
               )}
             </div>
@@ -155,32 +157,25 @@ export default function TaskModal({ phase, task, users, linkOptions, onClose, on
           </div>
 
           <div className="field">
-            <label htmlFor="tafter">Comes after (optional)</label>
-            <select
-              id="tafter"
-              className="select"
-              value={draft.dependsOn ?? ''}
-              onChange={(e) => {
-                const dependsOn = e.target.value ? Number(e.target.value) : null;
+            <label>Comes after (optional)</label>
+            <DependencyPicker
+              options={options}
+              value={draft.dependsOn}
+              onChange={(dependsOn) => {
                 const next = { ...draft, dependsOn };
-                const dep = options.find((o) => o.id === dependsOn);
-                if (dep && dep.status !== 'Complete' &&
+                const stillBlocked = options.some(
+                  (o) => dependsOn.includes(o.id) && o.status !== 'Complete'
+                );
+                if (stillBlocked &&
                     (next.status === 'In Progress' || next.status === 'Complete')) {
                   next.status = 'Not Started';
                 }
                 setDraft(next);
               }}
-            >
-              <option value="">No link — independent item</option>
-              {options.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.phaseName}: {o.name}
-                </option>
-              ))}
-            </select>
+            />
             <p className="hint">
-              Link this item to another one. It stays Blocked until that item is
-              Complete, then opens by itself.
+              Link this item to one or more items. It stays Blocked until every linked
+              item is Complete, then opens by itself.
             </p>
           </div>
 

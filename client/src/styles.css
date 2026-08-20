@@ -514,3 +514,19 @@ td.gday.clickable:not(.free):hover > i {
 .file-chip a { font-weight: 500; }
 .file-ico { font-size: 15px; }
 .act-item .icon-btn { flex: none; }
+
+/* ── Dependency picker chips ── */
+.dep-picker { display: flex; flex-direction: column; gap: 8px; }
+.dep-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.dep-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 6px 3px 10px; border-radius: 99px; font-size: 12px; font-weight: 500;
+  background: var(--gold-100); color: var(--gold); border: 1px solid #e5d8c0;
+}
+.dep-chip.done { background: var(--ink-100); color: var(--ink); border-color: #cfe0d5; }
+.dep-chip button {
+  border: none; background: rgba(0, 0, 0, 0.07); color: inherit;
+  width: 16px; height: 16px; border-radius: 50%; line-height: 1;
+  display: grid; place-items: center; font-size: 10px; padding: 0;
+}
+.dep-chip button:hover:not(:disabled) { background: rgba(0, 0, 0, 0.16); }

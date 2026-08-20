@@ -53,11 +53,13 @@ comments or files show a dot on their bar. Authors can delete their own entries,
 managers can delete any, and the panel also offers "Remove this day" to people who can
 edit the stage. Clicking an *empty* day cell still adds that day to the item.
 
-An item can optionally be linked to **come after** another item in the project ("Comes
-after" in the item form). While that predecessor is not Complete, the linked item shows
-as Blocked — on the pill and on the chart — and cannot be moved to In Progress or
-Complete. The moment the predecessor is completed, it opens again by itself. Circular
-chains are rejected, and deleting the predecessor simply removes the link.
+An item can optionally be linked to **come after** one or more items in the project
+("Comes after" in the item form and in the day panel). While any linked item is not
+Complete, the dependent item shows as Blocked — on the pill and on the chart, with a
+connector line drawn from each predecessor's last day to its first day — and cannot be
+moved to In Progress or Complete. The moment every linked item is completed, it opens
+again by itself. Circular chains are rejected, and deleting a predecessor removes just
+that link.
 
 **Dates**
 

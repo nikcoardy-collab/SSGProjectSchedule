@@ -23,9 +23,9 @@ export interface Task {
   selectedDates: string[];
   assigneeId: number | null;
   assigneeName: string | null;
-  dependsOn: number | null;
-  dependsOnName: string | null;
-  /** True while the item it comes after is not Complete. */
+  /** Items this one comes after; it opens only when all are Complete. */
+  predecessors: { id: number; name: string; status: TaskStatus }[];
+  /** True while any predecessor is not Complete. */
   blocked: boolean;
   /** Per-day comment/file counts, keyed by ISO date. */
   dayMeta: Record<string, { comments: number; files: number }>;

@@ -187,6 +187,11 @@ export default function SchedulePage() {
           task={dayView.task}
           iso={dayView.iso}
           currentUser={user}
+          linkOptions={project.phases.flatMap((ph) =>
+            ph.tasks.map((t) => ({
+              id: t.id, name: t.name, status: t.status, phaseName: ph.name,
+            }))
+          )}
           canEditDays={
             isPM ||
             project.phases.find((p) => p.id === dayView.task.phaseId)?.picUserId === user.id
