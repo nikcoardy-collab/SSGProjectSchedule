@@ -1,6 +1,0 @@
-client/src
-client/node_modules
-scripts
-supabase
-data
-*.md
