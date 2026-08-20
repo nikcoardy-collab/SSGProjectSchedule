@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
-import { db } from './db.js';
+import { one } from './db.js';
+import { a } from './util.js';
 
 export const JWT_SECRET =
   process.env.JWT_SECRET ||
@@ -19,11 +20,12 @@ export function issueToken(res, user) {
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
     maxAge: MAX_AGE,
+    path: '/',
   });
 }
 
 export function clearToken(res) {
-  res.clearCookie(COOKIE);
+  res.clearCookie(COOKIE, { path: '/' });
 }
 
 export function publicUser(u) {
@@ -40,23 +42,26 @@ export function publicUser(u) {
 }
 
 /** Populates req.user from the auth cookie; 401s when absent or stale. */
-export function requireAuth(req, res, next) {
+export const requireAuth = a(async (req, res, next) => {
   const token = req.cookies?.[COOKIE];
   if (!token) return res.status(401).json({ error: 'Not signed in' });
+
+  let uid;
   try {
-    const { uid } = jwt.verify(token, JWT_SECRET);
-    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(uid);
-    if (!user || !user.active) {
-      clearToken(res);
-      return res.status(401).json({ error: 'Account is no longer active' });
-    }
-    req.user = user;
-    next();
+    ({ uid } = jwt.verify(token, JWT_SECRET));
   } catch {
     clearToken(res);
     return res.status(401).json({ error: 'Session expired, please sign in again' });
   }
-}
+
+  const user = await one('SELECT * FROM users WHERE id = ?', [uid]);
+  if (!user || !user.active) {
+    clearToken(res);
+    return res.status(401).json({ error: 'Account is no longer active' });
+  }
+  req.user = user;
+  next();
+});
 
 export function requirePM(req, res, next) {
   if (req.user?.role !== 'pm') {
@@ -69,9 +74,8 @@ export function requirePM(req, res, next) {
  * A phase may be edited by any project manager, or by the user assigned as its PIC.
  * Returns the phase row, or null when the phase does not exist.
  */
-export function canEditPhase(user, phaseId) {
-  const phase = db.prepare('SELECT * FROM phases WHERE id = ?').get(phaseId);
+export async function canEditPhase(user, phaseId) {
+  const phase = await one('SELECT * FROM phases WHERE id = ?', [phaseId]);
   if (!phase) return { phase: null, allowed: false };
-  const allowed = user.role === 'pm' || phase.pic_user_id === user.id;
-  return { phase, allowed };
+  return { phase, allowed: user.role === 'pm' || phase.pic_user_id === user.id };
 }

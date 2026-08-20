@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
 
 interface Props {
@@ -9,7 +10,13 @@ interface Props {
   width?: number;
 }
 
-/** A light-weight popover pinned to an element's bounding box, kept inside the viewport. */
+/**
+ * A light-weight popover pinned to an element's bounding box, kept inside the viewport.
+ *
+ * Rendered through a portal on <body>: the schedule opens these from inside
+ * `position: sticky` table cells, and a sticky cell with a z-index starts its own
+ * stacking context that would otherwise trap the popover behind later rows.
+ */
 export default function Popover({ anchor, onClose, children, className = '', width }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ top: anchor.bottom + 6, left: anchor.left, ready: false });
@@ -38,7 +45,7 @@ export default function Popover({ anchor, onClose, children, className = '', wid
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  return (
+  return createPortal(
     <>
       <div className="pop-backdrop" onMouseDown={onClose} />
       <div
@@ -53,6 +60,7 @@ export default function Popover({ anchor, onClose, children, className = '', wid
       >
         {children}
       </div>
-    </>
+    </>,
+    document.body
   );
 }

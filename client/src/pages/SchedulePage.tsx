@@ -10,6 +10,12 @@ import ProjectModal from '../components/ProjectModal';
 import Popover from '../components/Popover';
 import { initials } from '../components/Shell';
 
+/** Timestamps arrive as ISO strings from Postgres. */
+function formatWhen(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleString();
+}
+
 type Editor =
   | { kind: 'new'; phase: Phase }
   | { kind: 'edit'; phase: Phase; task: Task }
@@ -237,7 +243,7 @@ export default function SchedulePage() {
                   <b>{a.userName}</b> {a.action}
                   {a.detail ? <> — {a.detail}</> : null}
                   <br />
-                  <time>{new Date(`${a.createdAt.replace(' ', 'T')}Z`).toLocaleString()}</time>
+                  <time>{formatWhen(a.createdAt)}</time>
                 </div>
               </div>
             ))}

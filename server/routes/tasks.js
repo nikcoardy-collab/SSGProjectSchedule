@@ -1,27 +1,31 @@
 import { Router } from 'express';
-import { db, logActivity, TASK_STATUSES } from '../db.js';
+import { logActivity, one, run, tx, TASK_STATUSES } from '../db.js';
 import { requireAuth, canEditPhase } from '../auth.js';
 import { normaliseDates } from '../dates.js';
+import { a, idParam, toId } from '../util.js';
 
 const router = Router();
 router.use(requireAuth);
+router.param('id', idParam);
 
 function loadTask(id) {
-  return db
-    .prepare(
-      `SELECT t.*, ph.project_id, ph.pic_user_id, ph.name AS phase_name
-       FROM tasks t JOIN phases ph ON ph.id = t.phase_id WHERE t.id = ?`
-    )
-    .get(id);
+  return one(
+    `SELECT t.*, ph.project_id, ph.pic_user_id, ph.name AS phase_name
+     FROM tasks t JOIN phases ph ON ph.id = t.phase_id WHERE t.id = ?`,
+    [id]
+  );
 }
 
-/** Add a sub-timeline under a stage. Open to the PM and to the stage's PIC. */
-router.post('/', (req, res) => {
-  const phaseId = Number(req.body?.phaseId);
-  const { phase, allowed } = canEditPhase(req.user, phaseId);
+/** Add a sub-timeline item under a stage. Open to the PM and to the stage's PIC. */
+router.post('/', a(async (req, res) => {
+  const phaseId = toId(req.body?.phaseId);
+  if (phaseId === null) return res.status(404).json({ error: 'Stage not found' });
+  const { phase, allowed } = await canEditPhase(req.user, phaseId);
   if (!phase) return res.status(404).json({ error: 'Stage not found' });
   if (!allowed) {
-    return res.status(403).json({ error: 'Only the project manager or this stage’s PIC can add items' });
+    return res
+      .status(403)
+      .json({ error: 'Only the project manager or this stage’s PIC can add items' });
   }
 
   const name = String(req.body?.name || '').trim();
@@ -30,35 +34,35 @@ router.post('/', (req, res) => {
   const status = TASK_STATUSES.includes(req.body?.status) ? req.body.status : 'Not Started';
   const { selectedDates, startDate, endDate } = normaliseDates(req.body?.selectedDates);
   const notes = String(req.body?.notes || '').trim();
-  const assigneeId = Number(req.body?.assigneeId) || null;
+  const assigneeId = toId(req.body?.assigneeId);
 
-  const pos = db
-    .prepare('SELECT COALESCE(MAX(position), -1) AS m FROM tasks WHERE phase_id = ?')
-    .get(phaseId).m;
+  const { m } = await one(
+    'SELECT coalesce(max(position), -1) AS m FROM tasks WHERE phase_id = ?',
+    [phaseId]
+  );
 
-  const info = db
-    .prepare(
-      `INSERT INTO tasks (phase_id, name, status, start_date, end_date, selected_dates,
-                          assignee_id, notes, position, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
-      phaseId, name, status, startDate, endDate, JSON.stringify(selectedDates),
-      assigneeId, notes, pos + 1, req.user.id
-    );
+  const task = await one(
+    `INSERT INTO tasks (phase_id, name, status, start_date, end_date, selected_dates,
+                        assignee_id, notes, position, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+    [phaseId, name, status, startDate, endDate, JSON.stringify(selectedDates),
+     assigneeId, notes, m + 1, req.user.id]
+  );
 
-  logActivity(phase.project_id, req.user.id, 'added', `${name} (${phase.name})`);
-  res.status(201).json({ taskId: Number(info.lastInsertRowid) });
-});
+  await logActivity(phase.project_id, req.user.id, 'added', `${name} (${phase.name})`);
+  res.status(201).json({ taskId: task.id });
+}));
 
-router.patch('/:id', (req, res) => {
+router.patch('/:id', a(async (req, res) => {
   const id = Number(req.params.id);
-  const task = loadTask(id);
+  const task = await loadTask(id);
   if (!task) return res.status(404).json({ error: 'Item not found' });
 
-  const { allowed } = canEditPhase(req.user, task.phase_id);
+  const { allowed } = await canEditPhase(req.user, task.phase_id);
   if (!allowed) {
-    return res.status(403).json({ error: 'Only the project manager or this stage’s PIC can edit items' });
+    return res
+      .status(403)
+      .json({ error: 'Only the project manager or this stage’s PIC can edit items' });
   }
 
   const name = req.body?.name === undefined ? task.name : String(req.body.name).trim();
@@ -72,7 +76,7 @@ router.patch('/:id', (req, res) => {
     status = req.body.status;
   }
 
-  let selectedDates = JSON.parse(task.selected_dates || '[]');
+  let selectedDates = task.selected_dates ?? [];
   let startDate = task.start_date;
   let endDate = task.end_date;
   if (req.body?.selectedDates !== undefined) {
@@ -85,14 +89,13 @@ router.patch('/:id', (req, res) => {
   const notes = req.body?.notes === undefined ? task.notes : String(req.body.notes).trim();
   let assigneeId = task.assignee_id;
   if (req.body?.assigneeId !== undefined) {
-    assigneeId = req.body.assigneeId === null || req.body.assigneeId === ''
-      ? null
-      : Number(req.body.assigneeId) || null;
+    assigneeId = toId(req.body.assigneeId);
   }
 
   let phaseId = task.phase_id;
-  if (req.body?.phaseId !== undefined && Number(req.body.phaseId) !== task.phase_id) {
-    const target = canEditPhase(req.user, Number(req.body.phaseId));
+  const requestedPhase = req.body?.phaseId === undefined ? null : toId(req.body.phaseId);
+  if (requestedPhase !== null && requestedPhase !== task.phase_id) {
+    const target = await canEditPhase(req.user, requestedPhase);
     if (!target.phase || target.phase.project_id !== task.project_id) {
       return res.status(400).json({ error: 'Cannot move this item to that stage' });
     }
@@ -100,41 +103,51 @@ router.patch('/:id', (req, res) => {
     phaseId = target.phase.id;
   }
 
-  db.prepare(
+  await run(
     `UPDATE tasks SET phase_id = ?, name = ?, status = ?, start_date = ?, end_date = ?,
-     selected_dates = ?, assignee_id = ?, notes = ?, updated_at = datetime('now') WHERE id = ?`
-  ).run(
-    phaseId, name, status, startDate, endDate, JSON.stringify(selectedDates),
-    assigneeId, notes, id
+     selected_dates = ?, assignee_id = ?, notes = ?, updated_at = now() WHERE id = ?`,
+    [phaseId, name, status, startDate, endDate, JSON.stringify(selectedDates),
+     assigneeId, notes, id]
   );
 
-  logActivity(task.project_id, req.user.id, 'updated', name);
+  await logActivity(task.project_id, req.user.id, 'updated', name);
   res.json({ ok: true });
-});
+}));
 
-router.delete('/:id', (req, res) => {
+router.delete('/:id', a(async (req, res) => {
   const id = Number(req.params.id);
-  const task = loadTask(id);
+  const task = await loadTask(id);
   if (!task) return res.status(404).json({ error: 'Item not found' });
-  const { allowed } = canEditPhase(req.user, task.phase_id);
+
+  const { allowed } = await canEditPhase(req.user, task.phase_id);
   if (!allowed) return res.status(403).json({ error: 'You cannot delete this item' });
 
-  db.prepare('DELETE FROM tasks WHERE id = ?').run(id);
-  logActivity(task.project_id, req.user.id, 'removed', task.name);
+  await run('DELETE FROM tasks WHERE id = ?', [id]);
+  await logActivity(task.project_id, req.user.id, 'removed', task.name);
   res.json({ ok: true });
-});
+}));
 
 /** Persist a new ordering of items inside one stage. */
-router.post('/reorder', (req, res) => {
-  const phaseId = Number(req.body?.phaseId);
-  const order = Array.isArray(req.body?.order) ? req.body.order.map(Number) : [];
-  const { phase, allowed } = canEditPhase(req.user, phaseId);
+router.post('/reorder', a(async (req, res) => {
+  const phaseId = toId(req.body?.phaseId);
+  const order = (Array.isArray(req.body?.order) ? req.body.order : [])
+    .map(toId)
+    .filter((id) => id !== null);
+  if (phaseId === null) return res.status(404).json({ error: 'Stage not found' });
+  const { phase, allowed } = await canEditPhase(req.user, phaseId);
   if (!phase) return res.status(404).json({ error: 'Stage not found' });
   if (!allowed) return res.status(403).json({ error: 'You cannot reorder this stage' });
 
-  const update = db.prepare('UPDATE tasks SET position = ? WHERE id = ? AND phase_id = ?');
-  db.transaction(() => order.forEach((taskId, i) => update.run(i, taskId, phaseId)))();
+  await tx(async (t) => {
+    for (const [i, taskId] of order.entries()) {
+      await t.run('UPDATE tasks SET position = ? WHERE id = ? AND phase_id = ?', [
+        i,
+        taskId,
+        phaseId,
+      ]);
+    }
+  });
   res.json({ ok: true });
-});
+}));
 
 export default router;
