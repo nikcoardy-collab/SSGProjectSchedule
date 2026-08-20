@@ -21,7 +21,7 @@ export default function Shell({ children }: { children: ReactNode }) {
         <Link className="brand" to="/">
           <div className="brand-mark">SSG</div>
           <div className="brand-text">
-            <strong>Solusi Golf Simulator</strong>
+            <strong>Solusi Simulator Golf</strong>
             <span>PROJECT SCHEDULE</span>
           </div>
         </Link>
