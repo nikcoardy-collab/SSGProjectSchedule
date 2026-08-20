@@ -184,6 +184,11 @@ export default function SchedulePage() {
           phase={editor.phase}
           task={editor.kind === 'edit' ? editor.task : null}
           users={users}
+          linkOptions={project.phases.flatMap((ph) =>
+            ph.tasks.map((t) => ({
+              id: t.id, name: t.name, status: t.status, phaseName: ph.name,
+            }))
+          )}
           onClose={() => setEditor(null)}
           onSave={async (draft) => {
             if (editor.kind === 'edit') {

@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import cookieParser from 'cookie-parser';
 
+import { schemaReady } from './db.js';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import projectRoutes from './routes/projects.js';
@@ -23,6 +24,15 @@ export function createApp({ serveClient = true } = {}) {
   app.use(cookieParser());
 
   const api = express.Router();
+  api.use((req, res, next) => {
+    schemaReady().then(
+      () => next(),
+      (err) => {
+        console.error('[db] schema upgrade failed (continuing):', err.message);
+        next();
+      }
+    );
+  });
   api.get('/health', (req, res) => res.json({ ok: true }));
   api.use('/auth', authRoutes);
   api.use('/users', userRoutes);

@@ -97,7 +97,8 @@ export default function GanttChart({
       if (isWeekend(iso)) classes.push('wknd');
       if (iso === today) classes.push('today');
       if (on) {
-        classes.push(`s-${task.status.toLowerCase().replace(/\s+/g, '')}`);
+        const shown = task.blocked ? 'Blocked' : task.status;
+        classes.push(`s-${shown.toLowerCase().replace(/\s+/g, '')}`);
         if (!filled.has(addDays(iso, -1))) classes.push('b-start');
         if (!filled.has(addDays(iso, 1))) classes.push('b-end');
       }
@@ -221,6 +222,9 @@ export default function GanttChart({
                           {task.assigneeName ? (
                             <span style={{ color: 'var(--muted)' }}> · {task.assigneeName}</span>
                           ) : null}
+                          {task.dependsOnName ? (
+                            <span style={{ color: 'var(--muted)' }}> · after {task.dependsOnName}</span>
+                          ) : null}
                         </button>
                         {editable && (
                           <div className="row-tools">
@@ -240,6 +244,7 @@ export default function GanttChart({
                       <StatusPill
                         status={task.status}
                         editable={editable}
+                        blockedBy={task.blocked ? task.dependsOnName : null}
                         onChange={(status: TaskStatus) => onPatchTask(task.id, { status })}
                       />
                     </td>

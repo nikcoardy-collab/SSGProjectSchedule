@@ -46,6 +46,12 @@ individual jobs like *Preliminary Survey*, *Order*, *Padding*, *Trackman iO Cali
 Each item carries a status (Not Started / In Progress / Complete / Blocked), an optional
 owner and notes.
 
+An item can optionally be linked to **come after** another item in the project ("Comes
+after" in the item form). While that predecessor is not Complete, the linked item shows
+as Blocked — on the pill and on the chart — and cannot be moved to In Progress or
+Complete. The moment the predecessor is completed, it opens again by itself. Circular
+chains are rejected, and deleting the predecessor simply removes the link.
+
 **Dates**
 
 Click an item's Start or End cell to open the day picker. Pick as many days as the work

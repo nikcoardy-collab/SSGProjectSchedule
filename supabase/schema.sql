@@ -82,3 +82,8 @@ ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE phases   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tasks    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE activity ENABLE ROW LEVEL SECURITY;
+
+-- ── v2: item dependencies ──────────────────────────────────────────────────
+-- A task may name one task it comes after. While that predecessor is not
+-- Complete, the dependent task is shown and enforced as Blocked.
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS depends_on integer REFERENCES tasks (id) ON DELETE SET NULL;

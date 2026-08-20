@@ -19,10 +19,12 @@ async function serialiseProject(p) {
   // One query for every task in the project, then grouped in memory — a query per
   // phase would be six round trips to Supabase instead of two.
   const taskRows = await many(
-    `SELECT t.*, u.name AS assignee_name
+    `SELECT t.*, u.name AS assignee_name,
+            dep.name AS depends_on_name, dep.status AS depends_on_status
      FROM tasks t
      JOIN phases ph ON ph.id = t.phase_id
      LEFT JOIN users u ON u.id = t.assignee_id
+     LEFT JOIN tasks dep ON dep.id = t.depends_on
      WHERE ph.project_id = ? ORDER BY t.position, t.id`,
     [p.id]
   );
@@ -40,6 +42,10 @@ async function serialiseProject(p) {
       selectedDates: t.selected_dates ?? [],
       assigneeId: t.assignee_id,
       assigneeName: t.assignee_name,
+      dependsOn: t.depends_on,
+      dependsOnName: t.depends_on_name,
+      // Derived, never stored: blocked while the predecessor is not Complete.
+      blocked: !!(t.depends_on && t.depends_on_status !== 'Complete'),
       notes: t.notes,
       position: t.position,
       updatedAt: t.updated_at,

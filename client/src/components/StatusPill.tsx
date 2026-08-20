@@ -11,10 +11,23 @@ interface Props {
   status: TaskStatus;
   editable: boolean;
   onChange: (status: TaskStatus) => void;
+  /** Set while the item this one comes after is not Complete. */
+  blockedBy?: string | null;
 }
 
-export default function StatusPill({ status, editable, onChange }: Props) {
+export default function StatusPill({ status, editable, onChange, blockedBy }: Props) {
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
+
+  if (blockedBy) {
+    return (
+      <button
+        className="status-pill st-blocked readonly"
+        title={`Waiting for "${blockedBy}" to be completed`}
+      >
+        Blocked
+      </button>
+    );
+  }
 
   return (
     <>

@@ -118,6 +118,28 @@ export const DEFAULT_PHASES = [
 
 export const TASK_STATUSES = ['Not Started', 'In Progress', 'Complete', 'Blocked'];
 
+/**
+ * Column upgrades newer than the original schema. Each statement is idempotent,
+ * so the deployed app can apply them itself on first use — no manual migration
+ * step for the database owner.
+ */
+const UPGRADES = [
+  'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS depends_on integer REFERENCES tasks (id) ON DELETE SET NULL',
+];
+
+let upgradesPromise = null;
+export function schemaReady() {
+  if (!upgradesPromise) {
+    upgradesPromise = (async () => {
+      for (const sql of UPGRADES) await pool.query(sql);
+    })().catch((err) => {
+      upgradesPromise = null; // retry on the next request
+      throw err;
+    });
+  }
+  return upgradesPromise;
+}
+
 export async function logActivity(projectId, userId, action, detail = '') {
   await run('INSERT INTO activity (project_id, user_id, action, detail) VALUES (?, ?, ?, ?)', [
     projectId ?? null,

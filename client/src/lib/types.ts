@@ -23,6 +23,10 @@ export interface Task {
   selectedDates: string[];
   assigneeId: number | null;
   assigneeName: string | null;
+  dependsOn: number | null;
+  dependsOnName: string | null;
+  /** True while the item it comes after is not Complete. */
+  blocked: boolean;
   notes: string;
   position: number;
   updatedAt: string;

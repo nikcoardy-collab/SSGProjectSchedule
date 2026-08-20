@@ -10,11 +10,46 @@ router.param('id', idParam);
 
 function loadTask(id) {
   return one(
-    `SELECT t.*, ph.project_id, ph.pic_user_id, ph.name AS phase_name
-     FROM tasks t JOIN phases ph ON ph.id = t.phase_id WHERE t.id = ?`,
+    `SELECT t.*, ph.project_id, ph.pic_user_id, ph.name AS phase_name,
+            dep.name AS depends_on_name, dep.status AS depends_on_status
+     FROM tasks t
+     JOIN phases ph ON ph.id = t.phase_id
+     LEFT JOIN tasks dep ON dep.id = t.depends_on
+     WHERE t.id = ?`,
     [id]
   );
 }
+
+/**
+ * Checks a proposed predecessor: it must exist in the same project, must not be
+ * the task itself, and must not create a circular chain. Returns the predecessor
+ * row so callers can also enforce the blocked-status rule.
+ */
+async function validateDependency(taskId, dependsOn, projectId) {
+  if (dependsOn === null) return { dep: null };
+  if (taskId !== null && dependsOn === taskId) {
+    return { error: 'An item cannot come after itself' };
+  }
+  const dep = await one(
+    `SELECT t.id, t.name, t.status, t.depends_on, ph.project_id
+     FROM tasks t JOIN phases ph ON ph.id = t.phase_id WHERE t.id = ?`,
+    [dependsOn]
+  );
+  if (!dep || dep.project_id !== projectId) {
+    return { error: 'That item is not in this project' };
+  }
+  let cursor = dep.depends_on;
+  let hops = 0;
+  while (cursor !== null && hops < 100) {
+    if (cursor === taskId) return { error: 'That would create a circular chain' };
+    const row = await one('SELECT depends_on FROM tasks WHERE id = ?', [cursor]);
+    cursor = row ? row.depends_on : null;
+    hops += 1;
+  }
+  return { dep };
+}
+
+const startedStatuses = ['In Progress', 'Complete'];
 
 /** Add a sub-timeline item under a stage. Open to the PM and to the stage's PIC. */
 router.post('/', a(async (req, res) => {
@@ -36,6 +71,15 @@ router.post('/', a(async (req, res) => {
   const notes = String(req.body?.notes || '').trim();
   const assigneeId = toId(req.body?.assigneeId);
 
+  const dependsOn = toId(req.body?.dependsOn);
+  const depCheck = await validateDependency(null, dependsOn, phase.project_id);
+  if (depCheck.error) return res.status(400).json({ error: depCheck.error });
+  if (depCheck.dep && depCheck.dep.status !== 'Complete' && startedStatuses.includes(status)) {
+    return res.status(400).json({
+      error: `Blocked by "${depCheck.dep.name}" — that item has to be completed first`,
+    });
+  }
+
   const { m } = await one(
     'SELECT coalesce(max(position), -1) AS m FROM tasks WHERE phase_id = ?',
     [phaseId]
@@ -43,10 +87,10 @@ router.post('/', a(async (req, res) => {
 
   const task = await one(
     `INSERT INTO tasks (phase_id, name, status, start_date, end_date, selected_dates,
-                        assignee_id, notes, position, created_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+                        assignee_id, notes, position, created_by, depends_on)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
     [phaseId, name, status, startDate, endDate, JSON.stringify(selectedDates),
-     assigneeId, notes, m + 1, req.user.id]
+     assigneeId, notes, m + 1, req.user.id, dependsOn]
   );
 
   await logActivity(phase.project_id, req.user.id, 'added', `${name} (${phase.name})`);
@@ -92,6 +136,22 @@ router.patch('/:id', a(async (req, res) => {
     assigneeId = toId(req.body.assigneeId);
   }
 
+  let dependsOn = task.depends_on;
+  let depName = task.depends_on_name;
+  let depStatus = task.depends_on_status;
+  if (req.body?.dependsOn !== undefined) {
+    dependsOn = toId(req.body.dependsOn);
+    const depCheck = await validateDependency(id, dependsOn, task.project_id);
+    if (depCheck.error) return res.status(400).json({ error: depCheck.error });
+    depName = depCheck.dep ? depCheck.dep.name : null;
+    depStatus = depCheck.dep ? depCheck.dep.status : null;
+  }
+  if (dependsOn && depStatus !== 'Complete' && startedStatuses.includes(status)) {
+    return res.status(400).json({
+      error: `Blocked by "${depName}" — that item has to be completed first`,
+    });
+  }
+
   let phaseId = task.phase_id;
   const requestedPhase = req.body?.phaseId === undefined ? null : toId(req.body.phaseId);
   if (requestedPhase !== null && requestedPhase !== task.phase_id) {
@@ -105,9 +165,10 @@ router.patch('/:id', a(async (req, res) => {
 
   await run(
     `UPDATE tasks SET phase_id = ?, name = ?, status = ?, start_date = ?, end_date = ?,
-     selected_dates = ?, assignee_id = ?, notes = ?, updated_at = now() WHERE id = ?`,
+     selected_dates = ?, assignee_id = ?, notes = ?, depends_on = ?, updated_at = now()
+     WHERE id = ?`,
     [phaseId, name, status, startDate, endDate, JSON.stringify(selectedDates),
-     assigneeId, notes, id]
+     assigneeId, notes, dependsOn, id]
   );
 
   await logActivity(task.project_id, req.user.id, 'updated', name);

@@ -10,20 +10,33 @@ export interface TaskDraft {
   status: TaskStatus;
   selectedDates: string[];
   assigneeId: number | null;
+  dependsOn: number | null;
   notes: string;
+}
+
+/** Another item in the project this one can be linked to come after. */
+export interface LinkOption {
+  id: number;
+  name: string;
+  status: TaskStatus;
+  phaseName: string;
 }
 
 interface Props {
   phase: Phase;
   task: Task | null;
   users: User[];
+  linkOptions: LinkOption[];
   onClose: () => void;
   onSave: (draft: TaskDraft) => Promise<void>;
 }
 
 function initialDraft(task: Task | null): TaskDraft {
   if (!task) {
-    return { name: '', status: 'Not Started', selectedDates: [], assigneeId: null, notes: '' };
+    return {
+      name: '', status: 'Not Started', selectedDates: [],
+      assigneeId: null, dependsOn: null, notes: '',
+    };
   }
   return {
     name: task.name,
@@ -34,12 +47,19 @@ function initialDraft(task: Task | null): TaskDraft {
         ? rangeBetween(task.startDate, task.endDate)
         : [],
     assigneeId: task.assigneeId,
+    dependsOn: task.dependsOn,
     notes: task.notes,
   };
 }
 
-export default function TaskModal({ phase, task, users, onClose, onSave }: Props) {
+export default function TaskModal({ phase, task, users, linkOptions, onClose, onSave }: Props) {
   const [draft, setDraft] = useState<TaskDraft>(() => initialDraft(task));
+
+  const options = linkOptions.filter((o) => o.id !== task?.id);
+  const chosen = options.find((o) => o.id === draft.dependsOn) ?? null;
+  // While the chosen predecessor is not complete, this item is blocked and
+  // cannot be started — mirror the server rule in the status field.
+  const blockedByChoice = !!chosen && chosen.status !== 'Complete';
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -98,9 +118,20 @@ export default function TaskModal({ phase, task, users, onClose, onSave }: Props
                 onChange={(e) => setDraft({ ...draft, status: e.target.value as TaskStatus })}
               >
                 {TASK_STATUSES.map((s) => (
-                  <option key={s} value={s}>{s}</option>
+                  <option
+                    key={s}
+                    value={s}
+                    disabled={blockedByChoice && (s === 'In Progress' || s === 'Complete')}
+                  >
+                    {s}
+                  </option>
                 ))}
               </select>
+              {blockedByChoice && (
+                <p className="hint">
+                  Shows as Blocked until “{chosen?.name}” is completed.
+                </p>
+              )}
             </div>
 
             <div className="field">
@@ -121,6 +152,36 @@ export default function TaskModal({ phase, task, users, onClose, onSave }: Props
                 ))}
               </select>
             </div>
+          </div>
+
+          <div className="field">
+            <label htmlFor="tafter">Comes after (optional)</label>
+            <select
+              id="tafter"
+              className="select"
+              value={draft.dependsOn ?? ''}
+              onChange={(e) => {
+                const dependsOn = e.target.value ? Number(e.target.value) : null;
+                const next = { ...draft, dependsOn };
+                const dep = options.find((o) => o.id === dependsOn);
+                if (dep && dep.status !== 'Complete' &&
+                    (next.status === 'In Progress' || next.status === 'Complete')) {
+                  next.status = 'Not Started';
+                }
+                setDraft(next);
+              }}
+            >
+              <option value="">No link — independent item</option>
+              {options.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.phaseName}: {o.name}
+                </option>
+              ))}
+            </select>
+            <p className="hint">
+              Link this item to another one. It stays Blocked until that item is
+              Complete, then opens by itself.
+            </p>
           </div>
 
           <div className="field">
