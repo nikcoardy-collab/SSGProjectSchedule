@@ -334,6 +334,11 @@ tr.task-row:hover td.gday > i { filter: brightness(1.12); }
 .pop {
   position: fixed; z-index: 61; background: var(--card); border: 1px solid var(--line);
   border-radius: 12px; box-shadow: var(--shadow-lg); padding: 14px;
+  /* Never taller or wider than the window — scroll inside instead, so the
+     buttons stay reachable on short laptop screens and high display scaling. */
+  max-height: calc(100vh - 16px);
+  max-width: calc(100vw - 16px);
+  overflow-y: auto;
 }
 .pop-title { font-size: 13px; font-weight: 600; margin-bottom: 10px; }
 .pop-menu { min-width: 210px; padding: 6px; }
