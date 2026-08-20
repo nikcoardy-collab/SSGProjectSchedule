@@ -1,4 +1,5 @@
 import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { Phase, Project, Task, TaskStatus, User } from '../lib/types';
 import {
   addDays, dayOfWeek, diffDays, durationDays, formatShort, isWeekend,
@@ -69,6 +70,38 @@ export function phaseSpan(phase: Phase) {
   const start = starts.reduce((a, b) => (a < b ? a : b));
   const end = ends.reduce((a, b) => (a > b ? a : b));
   return { start, end, days: durationDays(start, end) };
+}
+
+/** Small marker on linked rows; hovering it pops up the full link list. */
+function DepBadge({ task }: { task: Task }) {
+  const [tip, setTip] = useState<DOMRect | null>(null);
+  if (task.predecessors.length === 0) return null;
+  const left = tip ? Math.min(tip.left, window.innerWidth - 280) : 0;
+  return (
+    <>
+      <span
+        className="dep-mark"
+        onMouseEnter={(e) => setTip(e.currentTarget.getBoundingClientRect())}
+        onMouseLeave={() => setTip(null)}
+      >
+        ↳{task.predecessors.length > 1 ? task.predecessors.length : ''}
+      </span>
+      {tip &&
+        createPortal(
+          <div className="dep-tip" style={{ top: tip.bottom + 6, left }}>
+            <div className="dep-tip-title">Comes after</div>
+            {task.predecessors.map((p) => (
+              <div key={`${p.id}-${p.forDay ?? ''}`} className="dep-tip-row">
+                <i className={p.status === 'Complete' ? 'done' : 'pending'} />
+                <span className="n">{p.name}</span>
+                <em>{p.forDay ? `${shortDay(p.forDay)} stretch` : 'whole item'}</em>
+              </div>
+            ))}
+          </div>,
+          document.body
+        )}
+    </>
+  );
 }
 
 export default function GanttChart({
@@ -323,6 +356,7 @@ export default function GanttChart({
                   <tr className="task-row" key={task.id} data-task-id={task.id}>
                     <td className="sticky-col col-task">
                       <div className="task-cell">
+                        <DepBadge task={task} />
                         <button
                           className={`task-name${editable ? '' : ' readonly'}`}
                           onClick={() => (editable ? onEditTask(task) : undefined)}
@@ -331,14 +365,6 @@ export default function GanttChart({
                           {task.name}
                           {task.assigneeName ? (
                             <span style={{ color: 'var(--muted)' }}> · {task.assigneeName}</span>
-                          ) : null}
-                          {task.predecessors.length > 0 ? (
-                            <span style={{ color: 'var(--muted)' }}>
-                              {' '}· after{' '}
-                              {task.predecessors
-                                .map((p) => (p.forDay ? `${p.name} (${shortDay(p.forDay)})` : p.name))
-                                .join(', ')}
-                            </span>
                           ) : null}
                         </button>
                         {editable && (

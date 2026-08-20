@@ -540,3 +540,29 @@ td.gday.clickable:not(.free):hover > i {
   display: grid; place-items: center; font-size: 10px; padding: 0;
 }
 .dep-chip button:hover:not(:disabled) { background: rgba(0, 0, 0, 0.16); }
+
+/* ── Link marker + hover popup ── */
+.dep-mark {
+  flex: none; cursor: default;
+  font-size: 11px; font-weight: 600; line-height: 1;
+  color: var(--gold); background: var(--gold-100);
+  border: 1px solid #e5d8c0; border-radius: 5px; padding: 2px 5px;
+}
+.dep-tip {
+  position: fixed; z-index: 70; pointer-events: none;
+  min-width: 180px; max-width: 260px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: var(--shadow-lg); padding: 10px 12px; font-size: 12.5px;
+}
+.dep-tip-title {
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 6px;
+}
+.dep-tip-row { display: flex; align-items: center; gap: 7px; padding: 2px 0; }
+.dep-tip-row i {
+  width: 7px; height: 7px; border-radius: 50%; flex: none;
+}
+.dep-tip-row i.done { background: var(--ink-500); }
+.dep-tip-row i.pending { background: var(--danger); }
+.dep-tip-row .n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dep-tip-row em { font-style: normal; font-size: 11px; color: var(--muted); flex: none; }
