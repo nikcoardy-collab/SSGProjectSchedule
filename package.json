@@ -1,0 +1,26 @@
+{
+  "name": "ssg-project-schedule",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "SSG Project Schedule — collaborative project timeline for Solusi Golf Simulator",
+  "scripts": {
+    "dev": "concurrently -n api,web -c green,yellow \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "node --watch server/index.js",
+    "dev:client": "npm --prefix client run dev",
+    "build": "npm --prefix client run build",
+    "start": "NODE_ENV=production node server/index.js",
+    "setup": "npm install && npm --prefix client install"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^11.7.0",
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
