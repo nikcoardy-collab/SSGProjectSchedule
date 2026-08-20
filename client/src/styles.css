@@ -330,9 +330,9 @@ tr.task-row:hover td.gday > i { filter: brightness(1.12); }
 .add-task-btn:hover { border-color: var(--ink-500); color: var(--ink); background: #f6f9f7; }
 
 /* ── Popovers & modals ── */
-.pop-backdrop { position: fixed; inset: 0; z-index: 40; }
+.pop-backdrop { position: fixed; inset: 0; z-index: 60; }
 .pop {
-  position: fixed; z-index: 41; background: var(--card); border: 1px solid var(--line);
+  position: fixed; z-index: 61; background: var(--card); border: 1px solid var(--line);
   border-radius: 12px; box-shadow: var(--shadow-lg); padding: 14px;
 }
 .pop-title { font-size: 13px; font-weight: 600; margin-bottom: 10px; }
