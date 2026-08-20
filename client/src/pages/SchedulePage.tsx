@@ -233,6 +233,14 @@ export default function SchedulePage() {
             }
             await load();
           }}
+          onDelete={
+            editor.kind === 'edit'
+              ? async () => {
+                  await api.deleteTask(editor.task.id);
+                  await load();
+                }
+              : undefined
+          }
         />
       )}
 

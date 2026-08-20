@@ -83,6 +83,9 @@ function DepBadge({ task }: { task: Task }) {
         className="dep-mark"
         onMouseEnter={(e) => setTip(e.currentTarget.getBoundingClientRect())}
         onMouseLeave={() => setTip(null)}
+        onClick={(e) =>
+          setTip(tip ? null : e.currentTarget.getBoundingClientRect())
+        }
       >
         ↳{task.predecessors.length > 1 ? task.predecessors.length : ''}
       </span>
@@ -269,6 +272,18 @@ export default function GanttChart({
       </button>
       <div className="gantt-wrap" ref={wrapRef}>
       <table className="gantt" ref={tableRef}>
+        {/* Fixed table layout sizes columns from here, so every column is
+            fully specified and breakpoints only change the col widths. */}
+        <colgroup>
+          <col className="c-task" />
+          <col className="c-status" />
+          <col className="c-start" />
+          <col className="c-end" />
+          <col className="c-days" />
+          {timeline.map((iso) => (
+            <col key={iso} className="c-day" />
+          ))}
+        </colgroup>
         <thead>
           <tr>
             <th className="sticky-col col-task label">Tasks</th>

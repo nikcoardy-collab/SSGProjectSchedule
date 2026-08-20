@@ -36,6 +36,8 @@ interface Props {
   linkOptions: LinkOption[];
   onClose: () => void;
   onSave: (draft: TaskSave) => Promise<void>;
+  /** Shown when editing an existing item; hover toolbars don't exist on touch. */
+  onDelete?: () => Promise<void>;
 }
 
 function initialDraft(task: Task | null): TaskDraft {
@@ -59,7 +61,7 @@ function initialDraft(task: Task | null): TaskDraft {
   };
 }
 
-export default function TaskModal({ phase, task, users, linkOptions, onClose, onSave }: Props) {
+export default function TaskModal({ phase, task, users, linkOptions, onClose, onSave, onDelete }: Props) {
   const [draft, setDraft] = useState<TaskDraft>(() => initialDraft(task));
 
   const options = linkOptions.filter((o) => o.id !== task?.id);
@@ -232,6 +234,26 @@ export default function TaskModal({ phase, task, users, linkOptions, onClose, on
         </div>
 
         <div className="modal-foot">
+          {task && onDelete && (
+            <button
+              type="button"
+              className="btn btn-danger btn-sm"
+              disabled={busy}
+              onClick={async () => {
+                if (!confirm(`Delete "${task.name}"?`)) return;
+                setBusy(true);
+                try {
+                  await onDelete();
+                  onClose();
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : 'Could not delete');
+                  setBusy(false);
+                }
+              }}
+            >
+              Delete item
+            </button>
+          )}
           <div className="spacer" />
           <button type="button" className="btn" onClick={onClose}>Cancel</button>
           <button type="submit" className="btn btn-primary" disabled={busy}>
