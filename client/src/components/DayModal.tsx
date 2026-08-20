@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, MAX_FILE_BYTES } from '../lib/api';
+import { prepareImageForUpload } from '../lib/images';
 import type { DayDetails, Task, User } from '../lib/types';
 import { dayOfWeek, formatDate } from '../lib/dates';
 import { initials } from './Shell';
@@ -78,15 +79,17 @@ export default function DayModal({
     if (!list || list.length === 0) return;
     setUploading(true);
     setError('');
-    for (const file of Array.from(list)) {
+    for (const original of Array.from(list)) {
+      // Photos are shrunk in the browser first, so big camera shots just work.
+      const file = await prepareImageForUpload(original);
       if (file.size > MAX_FILE_BYTES) {
-        setError(`"${file.name}" is larger than 4 MB — resize or compress it first`);
+        setError(`"${original.name}" is larger than 4 MB and could not be compressed — try a smaller file`);
         continue;
       }
       try {
         await api.uploadDayFile(task.id, iso, file);
       } catch (err) {
-        setError(err instanceof Error ? err.message : `Could not upload ${file.name}`);
+        setError(err instanceof Error ? err.message : `Could not upload ${original.name}`);
       }
     }
     await refresh();
@@ -193,7 +196,9 @@ export default function DayModal({
               >
                 {uploading ? 'Uploading…' : '+ Add photos or files'}
               </button>
-              <span className="hint" style={{ marginLeft: 8 }}>up to 4 MB each</span>
+              <span className="hint" style={{ marginLeft: 8 }}>
+                photos are resized automatically · other files up to 4 MB
+              </span>
             </div>
           </div>
 
