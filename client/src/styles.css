@@ -207,7 +207,7 @@ a { color: var(--ink); }
 .seg button.on { background: var(--ink); color: #fff; font-weight: 600; }
 
 /* ── Gantt ── */
-.gantt-wrap { flex: 1; min-height: 0; overflow: auto; background: var(--card); }
+.gantt-wrap { flex: 1; min-height: 0; overflow: auto; background: var(--card); position: relative; }
 .gantt { border-collapse: separate; border-spacing: 0; table-layout: fixed; }
 .gantt th, .gantt td {
   border-right: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft);
@@ -333,6 +333,11 @@ td.gday.s-notstarted > i { background: #b8bcb2; }
 td.gday.s-blocked > i { background: var(--danger); }
 td.gday.s-complete > i { background: var(--ink); }
 tr.task-row:hover td.gday > i { filter: brightness(1.12); }
+
+/* Dependency connectors: predecessor's last day -> linked item's first day. */
+.dep-lines { position: absolute; top: 0; left: 0; z-index: 2; pointer-events: none; }
+.dep-lines path { fill: none; stroke: #8a6d3b; stroke-width: 1.6; opacity: 0.9; }
+.dep-lines path.blocked { stroke: var(--danger); stroke-dasharray: 4 3; }
 
 td.gday.clickable { cursor: pointer; }
 td.gday.clickable.free:hover {

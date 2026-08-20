@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useRef, useState } from 'react';
+import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Phase, Project, Task, TaskStatus, User } from '../lib/types';
 import {
   addDays, dayOfWeek, diffDays, durationDays, formatShort, isWeekend,
@@ -75,6 +75,53 @@ export default function GanttChart({
   const bands = useMemo(() => weekBands(timeline), [timeline]);
   const today = todayIso();
   const wrapRef = useRef<HTMLDivElement>(null);
+  const tableRef = useRef<HTMLTableElement>(null);
+
+  // Dependency connectors: measured from the rendered cells, drawn as an SVG
+  // overlay that scrolls with the chart.
+  const [links, setLinks] = useState<{ key: string; d: string; blocked: boolean }[]>([]);
+  const [canvas, setCanvas] = useState({ w: 0, h: 0 });
+
+  useLayoutEffect(() => {
+    function compute() {
+      const table = tableRef.current;
+      if (!table) return;
+      const origin = table.getBoundingClientRect();
+      const byId = new Map<number, Task>();
+      project.phases.forEach((ph) => ph.tasks.forEach((t) => byId.set(t.id, t)));
+
+      const next: { key: string; d: string; blocked: boolean }[] = [];
+      for (const t of byId.values()) {
+        if (!t.dependsOn || !t.startDate) continue;
+        const pred = byId.get(t.dependsOn);
+        if (!pred?.endDate) continue;
+        const endCell = table.querySelector(
+          `tr[data-task-id="${pred.id}"] td[data-iso="${pred.endDate}"]`
+        );
+        const startCell = table.querySelector(
+          `tr[data-task-id="${t.id}"] td[data-iso="${t.startDate}"]`
+        );
+        if (!endCell || !startCell) continue;
+        const a = endCell.getBoundingClientRect();
+        const b = startCell.getBoundingClientRect();
+        const x1 = a.right - origin.left - 3;
+        const y1 = a.top - origin.top + a.height / 2;
+        const x2 = b.left - origin.left + 1;
+        const y2 = b.top - origin.top + b.height / 2;
+        const bendX = Math.max(x1 + 7, x2 - 7);
+        const d =
+          y1 === y2
+            ? `M ${x1} ${y1} L ${x2} ${y2}`
+            : `M ${x1} ${y1} H ${bendX} V ${y2} H ${x2}`;
+        next.push({ key: `${pred.id}-${t.id}`, d, blocked: t.blocked });
+      }
+      setCanvas({ w: table.offsetWidth, h: table.offsetHeight });
+      setLinks(next);
+    }
+    compute();
+    window.addEventListener('resize', compute);
+    return () => window.removeEventListener('resize', compute);
+  }, [project, timeline]);
 
   const [datePicker, setDatePicker] = useState<{ task: Task; anchor: DOMRect } | null>(null);
   const [picMenu, setPicMenu] = useState<{ phase: Phase; anchor: DOMRect } | null>(null);
@@ -119,6 +166,7 @@ export default function GanttChart({
       return (
         <td
           key={iso}
+          data-iso={iso}
           className={classes.join(' ')}
           title={editable ? `${on ? 'Remove' : 'Add'} ${shortDay(iso)} — ${task.name}` : undefined}
           onClick={editable ? () => toggleDay(task, iso) : undefined}
@@ -144,7 +192,7 @@ export default function GanttChart({
 
   return (
     <div className="gantt-wrap" ref={wrapRef}>
-      <table className="gantt">
+      <table className="gantt" ref={tableRef}>
         <thead>
           <tr>
             <th className="sticky-col col-task label">Tasks</th>
@@ -229,7 +277,7 @@ export default function GanttChart({
                 </tr>
 
                 {phase.tasks.map((task) => (
-                  <tr className="task-row" key={task.id}>
+                  <tr className="task-row" key={task.id} data-task-id={task.id}>
                     <td className="sticky-col col-task">
                       <div className="task-cell">
                         <button
@@ -321,6 +369,27 @@ export default function GanttChart({
           })}
         </tbody>
       </table>
+
+      {links.length > 0 && (
+        <svg className="dep-lines" width={canvas.w} height={canvas.h} aria-hidden="true">
+          <defs>
+            <marker id="dep-arrow" markerWidth="7" markerHeight="7" refX="5.5" refY="3.5" orient="auto">
+              <path d="M 0 0.5 L 6 3.5 L 0 6.5 Z" fill="#8a6d3b" />
+            </marker>
+            <marker id="dep-arrow-blocked" markerWidth="7" markerHeight="7" refX="5.5" refY="3.5" orient="auto">
+              <path d="M 0 0.5 L 6 3.5 L 0 6.5 Z" fill="#a3382f" />
+            </marker>
+          </defs>
+          {links.map((l) => (
+            <path
+              key={l.key}
+              d={l.d}
+              className={l.blocked ? 'blocked' : ''}
+              markerEnd={l.blocked ? 'url(#dep-arrow-blocked)' : 'url(#dep-arrow)'}
+            />
+          ))}
+        </svg>
+      )}
 
       {datePicker && (
         <DatePickerPopover
