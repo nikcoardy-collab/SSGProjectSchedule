@@ -46,9 +46,14 @@ export default function DayModal({
   const [uploading, setUploading] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const isPM = currentUser.role === 'pm';
-  const [dependsOn, setDependsOn] = useState<number[]>(task.predecessors.map((p) => p.id));
+  // This panel edits the links scoped to THIS day's stretch of work; item-wide
+  // links (and other days') are preserved untouched on every change.
+  const [dependsOn, setDependsOn] = useState<number[]>(
+    task.predecessors.filter((p) => p.forDay === iso).map((p) => p.id)
+  );
   const [savingLink, setSavingLink] = useState(false);
   const linkChoices = linkOptions.filter((o) => o.id !== task.id);
+  const itemWide = task.predecessors.filter((p) => p.forDay === null);
 
   async function changeDependencies(next: number[]) {
     const previous = dependsOn;
@@ -56,7 +61,12 @@ export default function DayModal({
     setSavingLink(true);
     setError('');
     try {
-      await api.updateTask(task.id, { dependsOn: next });
+      const others = task.predecessors
+        .filter((p) => p.forDay !== iso)
+        .map((p) => ({ id: p.id, forDay: p.forDay }));
+      await api.updateTask(task.id, {
+        dependsOn: [...others, ...next.map((id) => ({ id, forDay: iso }))],
+      });
       onChanged();
     } catch (err) {
       setDependsOn(previous); // the server refused (e.g. a circular chain)
@@ -147,7 +157,7 @@ export default function DayModal({
 
           {canEditDays && (
             <div className="field">
-              <label>Comes after</label>
+              <label>This stretch comes after</label>
               <DependencyPicker
                 options={linkChoices}
                 value={dependsOn}
@@ -155,8 +165,10 @@ export default function DayModal({
                 onChange={changeDependencies}
               />
               <p className="hint">
-                Changes apply immediately. This item shows as Blocked until every
-                linked item is Complete.
+                Applies immediately, and only to the stretch of work around this day —
+                other days of this item are not held up.
+                {itemWide.length > 0 &&
+                  ` Item-wide links (${itemWide.map((p) => p.name).join(', ')}) are edited in the item form.`}
               </p>
             </div>
           )}

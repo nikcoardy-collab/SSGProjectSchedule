@@ -61,6 +61,17 @@ moved to In Progress or Complete. The moment every linked item is completed, it 
 again by itself. Circular chains are rejected, and deleting a predecessor removes just
 that link.
 
+Links come in two scopes. Added from the **item form**, a link covers the whole item.
+Added from a **day's panel**, it covers only that stretch of work — an item that works
+in separate runs of days can give each run its own links: the item can start on its
+early days while a later stretch (shaded as blocked, connector pointing at its first
+day) waits for its own predecessors, and the item can only be marked Complete once
+every link of either scope is done. Removing a day from the schedule retires the links
+scoped to it.
+
+The **+ Week** button at the chart's top-right extends the visible timeline by a week
+at a time, for scheduling work beyond the current horizon.
+
 **Dates**
 
 Click an item's Start or End cell to open the day picker. Pick as many days as the work

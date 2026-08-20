@@ -127,3 +127,9 @@ INSERT INTO task_deps (task_id, depends_on)
   ON CONFLICT DO NOTHING;
 UPDATE tasks SET depends_on = NULL WHERE depends_on IS NOT NULL;
 ALTER TABLE task_deps ENABLE ROW LEVEL SECURITY;
+
+-- ── v5: a link can apply to one stretch of work instead of the whole item ──
+ALTER TABLE task_deps ADD COLUMN IF NOT EXISTS for_day text;
+ALTER TABLE task_deps DROP CONSTRAINT IF EXISTS task_deps_pkey;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_task_deps_unique
+  ON task_deps (task_id, depends_on, coalesce(for_day, ''));

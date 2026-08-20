@@ -23,7 +23,7 @@ interface Props {
 }
 
 /** Every day the chart needs to show, padded a little on each side for breathing room. */
-function useTimeline(project: Project) {
+function useTimeline(project: Project, extraWeeks: number) {
   return useMemo(() => {
     const days: string[] = [];
     for (const phase of project.phases) {
@@ -36,9 +36,12 @@ function useTimeline(project: Project) {
     const min = days.reduce((a, b) => (a < b ? a : b));
     const max = days.reduce((a, b) => (a > b ? a : b));
     const from = startOfWeek(addDays(min, -3));
-    const to = addDays(from, Math.max(41, diffDays(from, addDays(max, 4))));
+    const to = addDays(
+      addDays(from, Math.max(41, diffDays(from, addDays(max, 4)))),
+      extraWeeks * 7
+    );
     return rangeBetween(from, to);
-  }, [project]);
+  }, [project, extraWeeks]);
 }
 
 interface WeekBand {
@@ -72,7 +75,8 @@ export default function GanttChart({
   project, users, isPM, currentUserId, onOpenDay,
   onAddTask, onEditTask, onDeleteTask, onPatchTask, onAssignPic, onDeletePhase,
 }: Props) {
-  const timeline = useTimeline(project);
+  const [extraWeeks, setExtraWeeks] = useState(0);
+  const timeline = useTimeline(project, extraWeeks);
   const bands = useMemo(() => weekBands(timeline), [timeline]);
   const today = todayIso();
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -101,7 +105,7 @@ export default function GanttChart({
             `tr[data-task-id="${pred.id}"] td[data-iso="${pred.endDate}"]`
           );
           const startCell = table.querySelector(
-            `tr[data-task-id="${t.id}"] td[data-iso="${t.startDate}"]`
+            `tr[data-task-id="${t.id}"] td[data-iso="${link.forDay ?? t.startDate}"]`
           );
           if (!endCell || !startCell) continue;
           const a = endCell.getBoundingClientRect();
@@ -115,7 +119,7 @@ export default function GanttChart({
             y1 === y2
               ? `M ${x1} ${y1} L ${x2} ${y2}`
               : `M ${x1} ${y1} H ${bendX} V ${y2} H ${x2}`;
-          next.push({ key: `${pred.id}-${t.id}`, d, blocked: link.status !== 'Complete' });
+          next.push({ key: `${pred.id}-${t.id}-${link.forDay ?? ''}`, d, blocked: link.status !== 'Complete' });
         }
       }
       setCanvas({ w: table.offsetWidth, h: table.offsetHeight });
@@ -151,6 +155,20 @@ export default function GanttChart({
           ? rangeBetween(task.startDate, task.endDate)
           : []
     );
+    // Days shaded as blocked: every day when an item-wide link is pending, or
+    // just the contiguous stretch around a pending day-scoped link.
+    const blockedDays = new Set<string>();
+    for (const link of task.predecessors) {
+      if (link.status === 'Complete') continue;
+      if (link.forDay === null) {
+        filled.forEach((d) => blockedDays.add(d));
+      } else if (filled.has(link.forDay)) {
+        let cursor = link.forDay;
+        while (filled.has(cursor)) { blockedDays.add(cursor); cursor = addDays(cursor, 1); }
+        cursor = addDays(link.forDay, -1);
+        while (filled.has(cursor)) { blockedDays.add(cursor); cursor = addDays(cursor, -1); }
+      }
+    }
     return timeline.map((iso) => {
       const on = filled.has(iso);
       const classes = ['gday'];
@@ -158,7 +176,7 @@ export default function GanttChart({
       if (isWeekend(iso)) classes.push('wknd');
       if (iso === today) classes.push('today');
       if (on) {
-        const shown = task.blocked ? 'Blocked' : task.status;
+        const shown = blockedDays.has(iso) ? 'Blocked' : task.status;
         classes.push(`s-${shown.toLowerCase().replace(/\s+/g, '')}`);
         if (!filled.has(addDays(iso, -1))) classes.push('b-start');
         if (!filled.has(addDays(iso, 1))) classes.push('b-end');
@@ -208,7 +226,15 @@ export default function GanttChart({
   }
 
   return (
-    <div className="gantt-wrap" ref={wrapRef}>
+    <div className="gantt-outer">
+      <button
+        className="add-week-btn"
+        title="Show another week on the timeline"
+        onClick={() => setExtraWeeks((w) => w + 1)}
+      >
+        + Week
+      </button>
+      <div className="gantt-wrap" ref={wrapRef}>
       <table className="gantt" ref={tableRef}>
         <thead>
           <tr>
@@ -308,7 +334,10 @@ export default function GanttChart({
                           ) : null}
                           {task.predecessors.length > 0 ? (
                             <span style={{ color: 'var(--muted)' }}>
-                              {' '}· after {task.predecessors.map((p) => p.name).join(', ')}
+                              {' '}· after{' '}
+                              {task.predecessors
+                                .map((p) => (p.forDay ? `${p.name} (${shortDay(p.forDay)})` : p.name))
+                                .join(', ')}
                             </span>
                           ) : null}
                         </button>
@@ -333,7 +362,7 @@ export default function GanttChart({
                         blockedBy={
                           task.blocked
                             ? task.predecessors
-                                .filter((p) => p.status !== 'Complete')
+                                .filter((p) => p.forDay === null && p.status !== 'Complete')
                                 .map((p) => p.name)
                                 .join(', ')
                             : null
@@ -485,6 +514,7 @@ export default function GanttChart({
           </button>
         </Popover>
       )}
+      </div>
     </div>
   );
 }

@@ -23,9 +23,12 @@ export interface Task {
   selectedDates: string[];
   assigneeId: number | null;
   assigneeName: string | null;
-  /** Items this one comes after; it opens only when all are Complete. */
-  predecessors: { id: number; name: string; status: TaskStatus }[];
-  /** True while any predecessor is not Complete. */
+  /**
+   * Items this one comes after. forDay null = the link covers the whole item;
+   * an ISO date scopes it to the stretch of work containing that day.
+   */
+  predecessors: { id: number; name: string; status: TaskStatus; forDay: string | null }[];
+  /** True while any item-wide predecessor is not Complete. */
   blocked: boolean;
   /** Per-day comment/file counts, keyed by ISO date. */
   dayMeta: Record<string, { comments: number; files: number }>;

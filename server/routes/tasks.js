@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { logActivity, many, one, run, tx, TASK_STATUSES } from '../db.js';
 import { requireAuth, canEditPhase } from '../auth.js';
-import { normaliseDates } from '../dates.js';
+import { expandRange, isIsoDate, normaliseDates } from '../dates.js';
 import { a, idParam, toId } from '../util.js';
 
 const router = Router();
@@ -21,16 +21,48 @@ function loadTask(id) {
 
 function loadPredecessors(taskId) {
   return many(
-    `SELECT p.id, p.name, p.status FROM task_deps d
+    `SELECT p.id, p.name, p.status, d.for_day FROM task_deps d
      JOIN tasks p ON p.id = d.depends_on WHERE d.task_id = ? ORDER BY p.id`,
     [taskId]
   );
 }
 
-/** Accepts null, a single id, or an array of ids; returns a deduped id list. */
+/** The days an item actually occupies, however its dates were stored. */
+function effectiveDays(selectedDates, startDate, endDate) {
+  if (Array.isArray(selectedDates) && selectedDates.length > 0) return selectedDates;
+  if (startDate && endDate) return expandRange(startDate, endDate);
+  return [];
+}
+
+/**
+ * Accepts null, a single id, an array of ids, or an array of {id, forDay}
+ * objects. Returns deduped edges; forDay null means the link covers the whole
+ * item, an ISO date scopes it to the stretch of work containing that day.
+ */
 function normaliseDepInput(raw) {
   const list = raw === null || raw === undefined ? [] : Array.isArray(raw) ? raw : [raw];
-  return [...new Set(list.map(toId).filter((id) => id !== null))];
+  const edges = [];
+  const seen = new Set();
+  for (const entry of list) {
+    let id = null;
+    let forDay = null;
+    if (entry !== null && typeof entry === 'object') {
+      id = toId(entry.id);
+      if (entry.forDay !== null && entry.forDay !== undefined && entry.forDay !== '') {
+        if (!isIsoDate(String(entry.forDay))) return { error: 'A link day is invalid' };
+        forDay = String(entry.forDay);
+      }
+    } else {
+      id = toId(entry);
+    }
+    if (id === null) continue;
+    const key = `${id}|${forDay ?? ''}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      edges.push({ id, forDay });
+    }
+  }
+  return { edges };
 }
 
 /**
@@ -38,23 +70,26 @@ function normaliseDepInput(raw) {
  * the task itself, and none may create a circular chain. Returns the predecessor
  * rows so callers can also enforce the blocked-status rule.
  */
-async function validateDependencies(taskId, depIds, projectId) {
-  if (depIds.length === 0) return { deps: [] };
-  if (depIds.length > MAX_DEPS) return { error: `At most ${MAX_DEPS} links per item` };
+async function validateDependencies(taskId, edges, projectId) {
+  if (edges.length === 0) return { deps: [] };
+  if (edges.length > MAX_DEPS) return { error: `At most ${MAX_DEPS} links per item` };
+  const depIds = [...new Set(edges.map((e) => e.id))];
   if (taskId !== null && depIds.includes(taskId)) {
     return { error: 'An item cannot come after itself' };
   }
 
   const placeholders = depIds.map(() => '?').join(', ');
-  const deps = await many(
+  const rows = await many(
     `SELECT t.id, t.name, t.status, ph.project_id
      FROM tasks t JOIN phases ph ON ph.id = t.phase_id
      WHERE t.id IN (${placeholders})`,
     depIds
   );
-  if (deps.length !== depIds.length || deps.some((d) => d.project_id !== projectId)) {
+  if (rows.length !== depIds.length || rows.some((d) => d.project_id !== projectId)) {
     return { error: 'That item is not in this project' };
   }
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const deps = edges.map((e) => ({ ...byId.get(e.id), forDay: e.forDay }));
 
   // Walk everything the proposed predecessors transitively come after; finding
   // this task there would close a loop.
@@ -77,13 +112,27 @@ async function validateDependencies(taskId, depIds, projectId) {
   return { deps };
 }
 
-const firstIncomplete = (deps) => deps.find((d) => d.status !== 'Complete');
+/**
+ * Which incomplete link stands in the way, honouring scope: item-wide links
+ * always count; day-scoped links count only against completing the item, and
+ * only while their day is still on the schedule.
+ */
+function firstBlocking(deps, targetStatus, days) {
+  const daySet = new Set(days);
+  return deps.find((d) => {
+    if (d.status === 'Complete') return false;
+    if (d.forDay === null || d.forDay === undefined) return true;
+    return targetStatus === 'Complete' && daySet.has(d.forDay);
+  });
+}
 
-async function replaceDeps(taskId, depIds) {
+async function replaceDeps(taskId, edges) {
   await tx(async (t) => {
     await t.run('DELETE FROM task_deps WHERE task_id = ?', [taskId]);
-    for (const depId of depIds) {
-      await t.run('INSERT INTO task_deps (task_id, depends_on) VALUES (?, ?)', [taskId, depId]);
+    for (const e of edges) {
+      await t.run('INSERT INTO task_deps (task_id, depends_on, for_day) VALUES (?, ?, ?)', [
+        taskId, e.id, e.forDay,
+      ]);
     }
   });
 }
@@ -108,14 +157,17 @@ router.post('/', a(async (req, res) => {
   const notes = String(req.body?.notes || '').trim();
   const assigneeId = toId(req.body?.assigneeId);
 
-  const depIds = normaliseDepInput(req.body?.dependsOn);
-  const depCheck = await validateDependencies(null, depIds, phase.project_id);
+  const depInput = normaliseDepInput(req.body?.dependsOn);
+  if (depInput.error) return res.status(400).json({ error: depInput.error });
+  const depCheck = await validateDependencies(null, depInput.edges, phase.project_id);
   if (depCheck.error) return res.status(400).json({ error: depCheck.error });
-  const blocking = firstIncomplete(depCheck.deps);
-  if (blocking && startedStatuses.includes(status)) {
-    return res.status(400).json({
-      error: `Blocked by "${blocking.name}" — that item has to be completed first`,
-    });
+  if (startedStatuses.includes(status)) {
+    const blocking = firstBlocking(depCheck.deps, status, selectedDates);
+    if (blocking) {
+      return res.status(400).json({
+        error: `Blocked by "${blocking.name}" — that item has to be completed first`,
+      });
+    }
   }
 
   const { m } = await one(
@@ -130,7 +182,7 @@ router.post('/', a(async (req, res) => {
     [phaseId, name, status, startDate, endDate, JSON.stringify(selectedDates),
      assigneeId, notes, m + 1, req.user.id]
   );
-  if (depIds.length) await replaceDeps(task.id, depIds);
+  if (depInput.edges.length) await replaceDeps(task.id, depInput.edges);
 
   await logActivity(phase.project_id, req.user.id, 'added', `${name} (${phase.name})`);
   res.status(201).json({ taskId: task.id });
@@ -178,19 +230,24 @@ router.patch('/:id', a(async (req, res) => {
   let deps;
   let depsChanged = false;
   if (req.body?.dependsOn !== undefined) {
-    const depIds = normaliseDepInput(req.body.dependsOn);
-    const depCheck = await validateDependencies(id, depIds, task.project_id);
+    const depInput = normaliseDepInput(req.body.dependsOn);
+    if (depInput.error) return res.status(400).json({ error: depInput.error });
+    const depCheck = await validateDependencies(id, depInput.edges, task.project_id);
     if (depCheck.error) return res.status(400).json({ error: depCheck.error });
     deps = depCheck.deps;
     depsChanged = true;
   } else {
-    deps = await loadPredecessors(id);
+    deps = (await loadPredecessors(id)).map((d) => ({ ...d, forDay: d.for_day ?? null }));
   }
-  const blocking = firstIncomplete(deps);
-  if (blocking && startedStatuses.includes(status)) {
-    return res.status(400).json({
-      error: `Blocked by "${blocking.name}" — that item has to be completed first`,
-    });
+  if (startedStatuses.includes(status)) {
+    const days = effectiveDays(selectedDates, startDate, endDate);
+    const blocking = firstBlocking(deps, status, days);
+    if (blocking) {
+      const where = blocking.forDay ? ` (link on that item's ${blocking.forDay} stretch)` : '';
+      return res.status(400).json({
+        error: `Blocked by "${blocking.name}" — that item has to be completed first${where}`,
+      });
+    }
   }
 
   let phaseId = task.phase_id;
@@ -211,7 +268,22 @@ router.patch('/:id', a(async (req, res) => {
     [phaseId, name, status, startDate, endDate, JSON.stringify(selectedDates),
      assigneeId, notes, id]
   );
-  if (depsChanged) await replaceDeps(id, deps.map((d) => d.id));
+  if (depsChanged) {
+    await replaceDeps(id, deps.map((d) => ({ id: d.id, forDay: d.forDay ?? null })));
+  }
+  // Dropping days from the schedule retires any links scoped to them.
+  if (req.body?.selectedDates !== undefined) {
+    const days = effectiveDays(selectedDates, startDate, endDate);
+    if (days.length === 0) {
+      await run('DELETE FROM task_deps WHERE task_id = ? AND for_day IS NOT NULL', [id]);
+    } else {
+      const ph = days.map(() => '?').join(', ');
+      await run(
+        `DELETE FROM task_deps WHERE task_id = ? AND for_day IS NOT NULL AND for_day NOT IN (${ph})`,
+        [id, ...days]
+      );
+    }
+  }
 
   await logActivity(task.project_id, req.user.id, 'updated', name);
   res.json({ ok: true });

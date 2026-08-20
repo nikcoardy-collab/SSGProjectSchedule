@@ -27,7 +27,7 @@ export interface TaskInput {
   selectedDates?: string[];
   notes?: string;
   assigneeId?: number | null;
-  dependsOn?: number[];
+  dependsOn?: { id: number; forDay: string | null }[];
 }
 
 export const api = {

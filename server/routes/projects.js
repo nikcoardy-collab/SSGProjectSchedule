@@ -29,7 +29,7 @@ async function serialiseProject(p) {
 
   // Every dependency edge in the project, grouped by the dependent task.
   const depRows = await many(
-    `SELECT d.task_id, pr.id, pr.name, pr.status
+    `SELECT d.task_id, d.for_day, pr.id, pr.name, pr.status
      FROM task_deps d
      JOIN tasks pr ON pr.id = d.depends_on
      JOIN tasks t ON t.id = d.task_id
@@ -40,7 +40,7 @@ async function serialiseProject(p) {
   const depsByTask = new Map();
   for (const d of depRows) {
     const list = depsByTask.get(d.task_id) ?? [];
-    list.push({ id: d.id, name: d.name, status: d.status });
+    list.push({ id: d.id, name: d.name, status: d.status, forDay: d.for_day ?? null });
     depsByTask.set(d.task_id, list);
   }
 
@@ -82,8 +82,11 @@ async function serialiseProject(p) {
       assigneeId: t.assignee_id,
       assigneeName: t.assignee_name,
       predecessors: depsByTask.get(t.id) ?? [],
-      // Derived, never stored: blocked while any predecessor is not Complete.
-      blocked: (depsByTask.get(t.id) ?? []).some((d) => d.status !== 'Complete'),
+      // Derived, never stored: an item-wide link that is not Complete blocks
+      // the whole item; day-scoped links only shade their own stretch.
+      blocked: (depsByTask.get(t.id) ?? []).some(
+        (d) => d.forDay === null && d.status !== 'Complete'
+      ),
       dayMeta: dayMeta.get(t.id) ?? {},
       notes: t.notes,
       position: t.position,

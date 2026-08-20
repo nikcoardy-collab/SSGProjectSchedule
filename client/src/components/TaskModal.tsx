@@ -11,9 +11,15 @@ export interface TaskDraft {
   status: TaskStatus;
   selectedDates: string[];
   assigneeId: number | null;
+  /** Item-wide link ids while editing in the form. */
   dependsOn: number[];
   notes: string;
 }
+
+/** What the form hands back on save: the full edge list, scoped links included. */
+export type TaskSave = Omit<TaskDraft, 'dependsOn'> & {
+  dependsOn: { id: number; forDay: string | null }[];
+};
 
 /** Another item in the project this one can be linked to come after. */
 export interface LinkOption {
@@ -29,7 +35,7 @@ interface Props {
   users: User[];
   linkOptions: LinkOption[];
   onClose: () => void;
-  onSave: (draft: TaskDraft) => Promise<void>;
+  onSave: (draft: TaskSave) => Promise<void>;
 }
 
 function initialDraft(task: Task | null): TaskDraft {
@@ -48,7 +54,7 @@ function initialDraft(task: Task | null): TaskDraft {
         ? rangeBetween(task.startDate, task.endDate)
         : [],
     assigneeId: task.assigneeId,
-    dependsOn: task.predecessors.map((p) => p.id),
+    dependsOn: task.predecessors.filter((p) => p.forDay === null).map((p) => p.id),
     notes: task.notes,
   };
 }
@@ -78,7 +84,18 @@ export default function TaskModal({ phase, task, users, linkOptions, onClose, on
     setBusy(true);
     setError('');
     try {
-      await onSave({ ...draft, name: draft.name.trim() });
+      // This form edits the item-wide links; day-scoped ones ride along untouched.
+      const dayScoped = (task?.predecessors ?? [])
+        .filter((p) => p.forDay !== null)
+        .map((p) => ({ id: p.id, forDay: p.forDay }));
+      await onSave({
+        ...draft,
+        name: draft.name.trim(),
+        dependsOn: [
+          ...draft.dependsOn.map((id) => ({ id, forDay: null })),
+          ...dayScoped,
+        ],
+      });
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save');

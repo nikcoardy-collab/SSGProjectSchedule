@@ -207,7 +207,17 @@ a { color: var(--ink); }
 .seg button.on { background: var(--ink); color: #fff; font-weight: 600; }
 
 /* ── Gantt ── */
+.gantt-outer { flex: 1; min-height: 0; position: relative; display: flex; }
 .gantt-wrap { flex: 1; min-height: 0; overflow: auto; background: var(--card); position: relative; }
+/* Pinned over the top-right of the chart, above the gold week band. */
+.add-week-btn {
+  position: absolute; top: 4px; right: 14px; z-index: 7;
+  border: none; border-radius: 7px; padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.22); color: #fff;
+  font-size: 12px; font-weight: 600; letter-spacing: 0.02em;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+.add-week-btn:hover { background: rgba(255, 255, 255, 0.34); }
 .gantt { border-collapse: separate; border-spacing: 0; table-layout: fixed; }
 .gantt th, .gantt td {
   border-right: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft);
