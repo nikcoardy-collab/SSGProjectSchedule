@@ -82,7 +82,20 @@ export default function GanttChart({
 
   const canEditPhase = (phase: Phase) => isPM || phase.picUserId === currentUserId;
 
-  function taskCells(task: Task) {
+  /** Clicking a day cell on the chart adds or removes that day for the item. */
+  function toggleDay(task: Task, iso: string) {
+    const current = task.selectedDates.length
+      ? [...task.selectedDates]
+      : task.startDate && task.endDate
+        ? rangeBetween(task.startDate, task.endDate)
+        : [];
+    const idx = current.indexOf(iso);
+    if (idx >= 0) current.splice(idx, 1);
+    else current.push(iso);
+    onPatchTask(task.id, { selectedDates: current.sort() });
+  }
+
+  function taskCells(task: Task, editable: boolean) {
     const filled = new Set(
       task.selectedDates.length
         ? task.selectedDates
@@ -102,8 +115,14 @@ export default function GanttChart({
         if (!filled.has(addDays(iso, -1))) classes.push('b-start');
         if (!filled.has(addDays(iso, 1))) classes.push('b-end');
       }
+      if (editable) classes.push('clickable');
       return (
-        <td key={iso} className={classes.join(' ')}>
+        <td
+          key={iso}
+          className={classes.join(' ')}
+          title={editable ? `${on ? 'Remove' : 'Add'} ${shortDay(iso)} — ${task.name}` : undefined}
+          onClick={editable ? () => toggleDay(task, iso) : undefined}
+        >
           {on && <i />}
         </td>
       );
@@ -275,7 +294,7 @@ export default function GanttChart({
                     <td className="sticky-col col-days cell-days">
                       {durationDays(task.startDate, task.endDate) || '—'}
                     </td>
-                    {taskCells(task)}
+                    {taskCells(task, editable)}
                   </tr>
                 ))}
 
