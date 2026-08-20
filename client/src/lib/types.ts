@@ -27,6 +27,8 @@ export interface Task {
   dependsOnName: string | null;
   /** True while the item it comes after is not Complete. */
   blocked: boolean;
+  /** Per-day comment/file counts, keyed by ISO date. */
+  dayMeta: Record<string, { comments: number; files: number }>;
   notes: string;
   position: number;
   updatedAt: string;
@@ -84,3 +86,26 @@ export interface ActivityEntry {
 
 export const TASK_STATUSES: TaskStatus[] = ['Not Started', 'In Progress', 'Complete', 'Blocked'];
 export const PROJECT_STATUSES: ProjectStatus[] = ['Active', 'On Hold', 'Complete', 'Cancelled'];
+
+export interface DayComment {
+  id: number;
+  userId: number | null;
+  userName: string;
+  body: string;
+  createdAt: string;
+}
+
+export interface DayFile {
+  id: number;
+  userId: number | null;
+  userName: string;
+  name: string;
+  mime: string;
+  size: number;
+  createdAt: string;
+}
+
+export interface DayDetails {
+  comments: DayComment[];
+  files: DayFile[];
+}

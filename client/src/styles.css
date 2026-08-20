@@ -324,7 +324,14 @@ td.gday.wknd.free { background: #fafaf8; }
 td.gday.today { box-shadow: inset 1px 0 0 var(--ink), inset -1px 0 0 var(--ink); }
 td.gday > i {
   display: block; height: 16px; border-radius: 3px; background: var(--ink);
-  margin: 0 1px;
+  margin: 0 1px; position: relative;
+}
+/* A day that carries comments or files shows a small dot on its bar. */
+td.gday > i .meta-dot {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #fff; opacity: 0.95; pointer-events: none;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18);
 }
 td.gday.b-start > i { border-radius: 4px 3px 3px 4px; margin-left: 3px; }
 td.gday.b-end > i { border-radius: 3px 4px 4px 3px; margin-right: 3px; }
@@ -344,7 +351,10 @@ td.gday.clickable.free:hover {
   background: var(--ink-100);
   box-shadow: inset 0 0 0 1.5px var(--ink-500);
 }
-td.gday.clickable:not(.free):hover > i { opacity: 0.4; }
+td.gday.clickable:not(.free):hover > i {
+  filter: brightness(1.25);
+  box-shadow: 0 0 0 1.5px var(--ink-500);
+}
 
 .gantt tfoot td { border: none; height: 44px; background: var(--card); }
 .add-task-cell { padding: 0 8px 0 16px; }
@@ -482,3 +492,25 @@ td.gday.clickable:not(.free):hover > i { opacity: 0.4; }
   .col-status { left: 180px; width: 100px; min-width: 100px; }
   .col-start, .col-end, .col-days { display: none; }
 }
+
+/* ── Day details ── */
+.day-modal { max-width: 620px; }
+.photo-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px; margin-bottom: 10px;
+}
+.photo { margin: 0; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: #fff; }
+.photo img { width: 100%; height: 96px; object-fit: cover; display: block; }
+.photo figcaption {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 11px; color: var(--muted); padding: 4px 6px;
+}
+.photo figcaption span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-chip {
+  display: flex; align-items: center; gap: 8px;
+  border: 1px solid var(--line); border-radius: 8px; background: #fbfaf8;
+  padding: 7px 10px; margin-bottom: 6px; font-size: 13px;
+}
+.file-chip a { font-weight: 500; }
+.file-ico { font-size: 15px; }
+.act-item .icon-btn { flex: none; }

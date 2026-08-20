@@ -10,6 +10,7 @@ import userRoutes from './routes/users.js';
 import projectRoutes from './routes/projects.js';
 import phaseRoutes from './routes/phases.js';
 import taskRoutes from './routes/tasks.js';
+import dayRoutes from './routes/days.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -39,6 +40,7 @@ export function createApp({ serveClient = true } = {}) {
   api.use('/projects', projectRoutes);
   api.use('/phases', phaseRoutes);
   api.use('/tasks', taskRoutes);
+  api.use('/', dayRoutes);
   api.use((req, res) => res.status(404).json({ error: 'Unknown endpoint' }));
 
   app.use('/api', api);

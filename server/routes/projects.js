@@ -29,6 +29,30 @@ async function serialiseProject(p) {
     [p.id]
   );
 
+  // Per-day comment/file counts drive the little dot markers on the chart.
+  const commentCounts = await many(
+    `SELECT c.task_id, c.day, count(*)::int AS n
+     FROM task_day_comments c
+     JOIN tasks t ON t.id = c.task_id JOIN phases ph ON ph.id = t.phase_id
+     WHERE ph.project_id = ? GROUP BY c.task_id, c.day`,
+    [p.id]
+  );
+  const fileCounts = await many(
+    `SELECT f.task_id, f.day, count(*)::int AS n
+     FROM task_day_files f
+     JOIN tasks t ON t.id = f.task_id JOIN phases ph ON ph.id = t.phase_id
+     WHERE ph.project_id = ? GROUP BY f.task_id, f.day`,
+    [p.id]
+  );
+  const dayMeta = new Map();
+  const bump = (taskId, day, key, n) => {
+    const forTask = dayMeta.get(taskId) ?? {};
+    forTask[day] = { comments: 0, files: 0, ...forTask[day], [key]: n };
+    dayMeta.set(taskId, forTask);
+  };
+  commentCounts.forEach((r) => bump(r.task_id, r.day, 'comments', r.n));
+  fileCounts.forEach((r) => bump(r.task_id, r.day, 'files', r.n));
+
   const tasksByPhase = new Map();
   for (const t of taskRows) {
     const list = tasksByPhase.get(t.phase_id) ?? [];
@@ -46,6 +70,7 @@ async function serialiseProject(p) {
       dependsOnName: t.depends_on_name,
       // Derived, never stored: blocked while the predecessor is not Complete.
       blocked: !!(t.depends_on && t.depends_on_status !== 'Complete'),
+      dayMeta: dayMeta.get(t.id) ?? {},
       notes: t.notes,
       position: t.position,
       updatedAt: t.updated_at,

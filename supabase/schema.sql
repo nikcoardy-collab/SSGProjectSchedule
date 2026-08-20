@@ -87,3 +87,30 @@ ALTER TABLE activity ENABLE ROW LEVEL SECURITY;
 -- A task may name one task it comes after. While that predecessor is not
 -- Complete, the dependent task is shown and enforced as Blocked.
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS depends_on integer REFERENCES tasks (id) ON DELETE SET NULL;
+
+-- ── v3: per-day comments, files and photos on a task ───────────────────────
+CREATE TABLE IF NOT EXISTS task_day_comments (
+  id         integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+  task_id    integer     NOT NULL REFERENCES tasks (id) ON DELETE CASCADE,
+  day        text        NOT NULL,
+  user_id    integer     REFERENCES users (id) ON DELETE SET NULL,
+  body       text        NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_day_comments ON task_day_comments (task_id, day);
+
+CREATE TABLE IF NOT EXISTS task_day_files (
+  id         integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+  task_id    integer     NOT NULL REFERENCES tasks (id) ON DELETE CASCADE,
+  day        text        NOT NULL,
+  user_id    integer     REFERENCES users (id) ON DELETE SET NULL,
+  name       text        NOT NULL,
+  mime       text        NOT NULL DEFAULT 'application/octet-stream',
+  size       integer     NOT NULL,
+  data       bytea       NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_day_files ON task_day_files (task_id, day);
+
+ALTER TABLE task_day_comments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE task_day_files    ENABLE ROW LEVEL SECURITY;

@@ -13,6 +13,7 @@ interface Props {
   users: User[];
   isPM: boolean;
   currentUserId: number;
+  onOpenDay: (task: Task, iso: string) => void;
   onAddTask: (phaseId: number) => void;
   onEditTask: (task: Task) => void;
   onDeleteTask: (task: Task) => void;
@@ -68,7 +69,7 @@ export function phaseSpan(phase: Phase) {
 }
 
 export default function GanttChart({
-  project, users, isPM, currentUserId,
+  project, users, isPM, currentUserId, onOpenDay,
   onAddTask, onEditTask, onDeleteTask, onPatchTask, onAssignPic, onDeletePhase,
 }: Props) {
   const timeline = useTimeline(project);
@@ -129,17 +130,15 @@ export default function GanttChart({
 
   const canEditPhase = (phase: Phase) => isPM || phase.picUserId === currentUserId;
 
-  /** Clicking a day cell on the chart adds or removes that day for the item. */
-  function toggleDay(task: Task, iso: string) {
+  /** Clicking an empty day cell on the chart adds that day to the item. */
+  function addDay(task: Task, iso: string) {
     const current = task.selectedDates.length
       ? [...task.selectedDates]
       : task.startDate && task.endDate
         ? rangeBetween(task.startDate, task.endDate)
         : [];
-    const idx = current.indexOf(iso);
-    if (idx >= 0) current.splice(idx, 1);
-    else current.push(iso);
-    onPatchTask(task.id, { selectedDates: current.sort() });
+    if (current.includes(iso)) return;
+    onPatchTask(task.id, { selectedDates: [...current, iso].sort() });
   }
 
   function taskCells(task: Task, editable: boolean) {
@@ -162,16 +161,32 @@ export default function GanttChart({
         if (!filled.has(addDays(iso, -1))) classes.push('b-start');
         if (!filled.has(addDays(iso, 1))) classes.push('b-end');
       }
-      if (editable) classes.push('clickable');
+      // Occupied days open their details for anyone; empty days are only
+      // clickable for people who can edit this stage.
+      const meta = task.dayMeta?.[iso];
+      if (on || editable) classes.push('clickable');
+      const title = on
+        ? `${shortDay(iso)} — ${task.name}: open day details${
+            meta ? ` (${meta.comments ? `${meta.comments} comment${meta.comments === 1 ? '' : 's'}` : ''}${meta.comments && meta.files ? ', ' : ''}${meta.files ? `${meta.files} file${meta.files === 1 ? '' : 's'}` : ''})` : ''
+          }`
+        : editable
+          ? `Add ${shortDay(iso)} — ${task.name}`
+          : undefined;
       return (
         <td
           key={iso}
           data-iso={iso}
           className={classes.join(' ')}
-          title={editable ? `${on ? 'Remove' : 'Add'} ${shortDay(iso)} — ${task.name}` : undefined}
-          onClick={editable ? () => toggleDay(task, iso) : undefined}
+          title={title}
+          onClick={
+            on
+              ? () => onOpenDay(task, iso)
+              : editable
+                ? () => addDay(task, iso)
+                : undefined
+          }
         >
-          {on && <i />}
+          {on && <i>{meta ? <span className="meta-dot" /> : null}</i>}
         </td>
       );
     });

@@ -3,9 +3,10 @@ import { Link, useParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import type { ActivityEntry, Phase, Project, Task, User } from '../lib/types';
-import { formatDate, formatShort } from '../lib/dates';
+import { formatDate, formatShort, rangeBetween } from '../lib/dates';
 import GanttChart, { phaseSpan } from '../components/GanttChart';
 import TaskModal from '../components/TaskModal';
+import DayModal from '../components/DayModal';
 import ProjectModal from '../components/ProjectModal';
 import Popover from '../components/Popover';
 import { initials } from '../components/Shell';
@@ -34,6 +35,7 @@ export default function SchedulePage() {
   const [editingProject, setEditingProject] = useState(false);
   const [activityAnchor, setActivityAnchor] = useState<DOMRect | null>(null);
   const [addingPhase, setAddingPhase] = useState(false);
+  const [dayView, setDayView] = useState<{ task: Task; iso: string } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -159,6 +161,7 @@ export default function SchedulePage() {
         users={users}
         isPM={isPM}
         currentUserId={user.id}
+        onOpenDay={(task, iso) => setDayView({ task, iso })}
         onAddTask={(phaseId) => {
           const phase = project.phases.find((p) => p.id === phaseId);
           if (phase) setEditor({ kind: 'new', phase });
@@ -178,6 +181,33 @@ export default function SchedulePage() {
           }
         }}
       />
+
+      {dayView && (
+        <DayModal
+          task={dayView.task}
+          iso={dayView.iso}
+          currentUser={user}
+          canEditDays={
+            isPM ||
+            project.phases.find((p) => p.id === dayView.task.phaseId)?.picUserId === user.id
+          }
+          onClose={() => setDayView(null)}
+          onChanged={() => load()}
+          onRemoveDay={() => {
+            const t = dayView.task;
+            const current = t.selectedDates.length
+              ? [...t.selectedDates]
+              : t.startDate && t.endDate
+                ? rangeBetween(t.startDate, t.endDate)
+                : [];
+            run(() =>
+              api.updateTask(t.id, {
+                selectedDates: current.filter((d) => d !== dayView.iso),
+              })
+            );
+          }}
+        />
+      )}
 
       {editor && (
         <TaskModal

@@ -46,6 +46,13 @@ individual jobs like *Preliminary Survey*, *Order*, *Padding*, *Trackman iO Cali
 Each item carries a status (Not Started / In Progress / Complete / Blocked), an optional
 owner and notes.
 
+Every scheduled day of an item doubles as a small work log: clicking an occupied day on
+the chart opens that day's details, where anyone on the team can leave comments and
+attach photos or files (up to 4 MB each, stored in the database). Days that carry
+comments or files show a dot on their bar. Authors can delete their own entries, project
+managers can delete any, and the panel also offers "Remove this day" to people who can
+edit the stage. Clicking an *empty* day cell still adds that day to the item.
+
 An item can optionally be linked to **come after** another item in the project ("Comes
 after" in the item form). While that predecessor is not Complete, the linked item shows
 as Blocked — on the pill and on the chart — and cannot be moved to In Progress or
